@@ -126,7 +126,7 @@ switch ( true ) {
 		break;
 	// C. create / update blog
 	case isset($_SESSION["user_session"]) && isset($_POST['action']) && isset($_POST['blog-editor']) 
-			&& $_POST['action']=='save-blog' && is_valid_blog_entry() :		
+			&& ($_POST['action']=='save-blog'||$_POST['action']=='remove-blog') && is_valid_blog_entry() :		
 		$blog = get_blog_params();
 		save_blog_entry($blog);			
 		break;
@@ -902,6 +902,11 @@ function export_blog_process($config,$env) {
 				if(this.value=='B') { $('#wrap-blog-path').hide(); } 
 				else { $('#wrap-blog-path').show(); } 
 			});			
+			$('#btn-remove-blog').click(function(){				
+				$('#form-save-blog #action').val( 'remove-blog' );						
+				$('#blog-publish-status').val( 'R' );			
+				$('#form-save-blog').submit();
+			});
 
 
 			<?php if( $_POST['action']=='save-blog' ) : ?>
@@ -1116,7 +1121,7 @@ function export_blog_process($config,$env) {
 	    	
 	    	<!-- div.ui-save-blog -->
 			<div id="save-blog" class="container ui-save-blog">
-				<form action="" method="POST" class="form" role="form">
+				<form id="form-save-blog" action="" method="POST" class="form" role="form">
 				<p>		   
 					<div class="row">
 						<div class="form-group col-xs-4">
@@ -1135,9 +1140,11 @@ function export_blog_process($config,$env) {
 								<?php if(get('blog-publish-status')=='P'):?>
 									<option value="D">Draft</option>
 									<option value="P" selected="selected">Published</option>
+									<option value="R">Remove</option>
 								<?php else: ?>
 									<option value="D" selected="selected">Draft</option>
 									<option value="P">Published</option>
+									<option value="R">Remove</option>
 								<?php endif; ?>
 							</select>						
 						</div>
@@ -1290,7 +1297,7 @@ function export_blog_process($config,$env) {
 					<p>Do you want to remove this blog entry?</p>
 				</div>
 				<div class="modal-footer">
-					<button type="button" class="btn btn-warning" data-dismiss="modal">Yes</button>
+					<button id="btn-remove-blog" type="button" class="btn btn-warning" data-dismiss="modal">Yes</button>
 					<button type="button" class="btn btn-default" data-dismiss="modal">No</button>
 				</div>
 			</div>
