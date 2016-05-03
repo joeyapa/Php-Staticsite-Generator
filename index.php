@@ -78,8 +78,8 @@ $_SQLITE_DATABASE_PATH = 'db/pstahl-sqlite.db';
 $_ADMIN_EMAIL_LOGIN = 'z@z.z';
 $_ADMIN_PASSWORD = '1';
 $_PSTAHL_VERSION = '1';
-$_TEMPLATE_ARCHIVE = 'archive.tpl.html';
-$_TEMPLATE_HOME = 'home.tpl.html';
+$_TEMPLATE_ARCHIVE = 'default.tpl.html';
+$_TEMPLATE_HOME = 'default.tpl.html';
 
 
 /**
@@ -198,6 +198,7 @@ class PstahlSqlite extends SQLite3 {
 			  CREATED_DTTM        DATETIME          NOT NULL   DEFAULT CURRENT_TIMESTAMP,
 			  LAST_UPDATED_DTTM   DATETIME          NOT NULL,
 			  CONTENT             TEXT,
+			  CONTENT_SUMMARY     TEXT,
 			  CONTENT_TYPE        CHAR(1)           NOT NULL   DEFAULT 'B',
 			  CONTENT_PATH        TEXT              NULL );
 
@@ -249,8 +250,8 @@ EOF;
 	function create_blog($blog) {
 		$this->opendb();
 		$blog['BLOG_ID'] = hash('md5',$blog['TITLE'] . time());
-		$sql = 'INSERT INTO BLOG (BLOG_ID,TITLE,SEGMENT,STATUS,PUBLISH_DTTM,CONTENT,LAST_UPDATED_DTTM,CONTENT_TYPE,CONTENT_PATH) 
-			VALUES (:BLOG_ID,:TITLE,:SEGMENT,:STATUS,:PUBLISH_DTTM,:CONTENT,CURRENT_TIMESTAMP,:CONTENT_TYPE,:CONTENT_PATH)';		
+		$sql = 'INSERT INTO BLOG (BLOG_ID,TITLE,SEGMENT,STATUS,PUBLISH_DTTM,CONTENT,CONTENT_SUMMARY,LAST_UPDATED_DTTM,CONTENT_TYPE,CONTENT_PATH) 
+			VALUES (:BLOG_ID,:TITLE,:SEGMENT,:STATUS,:PUBLISH_DTTM,:CONTENT,:CONTENT_SUMMARY,CURRENT_TIMESTAMP,:CONTENT_TYPE,:CONTENT_PATH)';		
 		$stmt = $this->prepare($sql);
 		$stmt->bindValue(':BLOG_ID', $blog['BLOG_ID'], SQLITE3_TEXT);
 		$stmt->bindValue(':TITLE', $blog['TITLE'], SQLITE3_TEXT);
@@ -258,6 +259,7 @@ EOF;
 		$stmt->bindValue(':STATUS', $blog['STATUS'], SQLITE3_TEXT);
 		$stmt->bindValue(':PUBLISH_DTTM', $blog['PUBLISH_DTTM'], SQLITE3_TEXT);
 		$stmt->bindValue(':CONTENT', $blog['CONTENT'], SQLITE3_TEXT);
+		$stmt->bindValue(':CONTENT_SUMMARY', $blog['CONTENT_SUMMARY'], SQLITE3_TEXT);
 		$stmt->bindValue(':CONTENT_TYPE', $blog['CONTENT_TYPE'], SQLITE3_TEXT);
 		$stmt->bindValue(':CONTENT_PATH', $blog['CONTENT_PATH'], SQLITE3_TEXT);
 		$result = $stmt->execute();		
@@ -274,7 +276,7 @@ EOF;
 	function update_blog($blog) {
 		$this->opendb();
 		$sql = 'UPDATE BLOG SET TITLE=:TITLE,SEGMENT=:SEGMENT,STATUS=:STATUS,PUBLISH_DTTM=:PUBLISH_DTTM,
-			CONTENT=:CONTENT,LAST_UPDATED_DTTM=CURRENT_TIMESTAMP,CONTENT_TYPE=:CONTENT_TYPE,
+			CONTENT=:CONTENT,CONTENT_SUMMARY=:CONTENT_SUMMARY,LAST_UPDATED_DTTM=CURRENT_TIMESTAMP,CONTENT_TYPE=:CONTENT_TYPE,
 			CONTENT_PATH=:CONTENT_PATH WHERE BLOG_ID=:BLOG_ID';
 		$stmt = $this->prepare($sql);
 		$stmt->bindValue(':BLOG_ID', $blog['BLOG_ID'], SQLITE3_TEXT);
@@ -282,7 +284,8 @@ EOF;
 		$stmt->bindValue(':SEGMENT', $blog['SEGMENT'], SQLITE3_TEXT);
 		$stmt->bindValue(':STATUS', $blog['STATUS'], SQLITE3_TEXT);
 		$stmt->bindValue(':PUBLISH_DTTM', $blog['PUBLISH_DTTM'], SQLITE3_TEXT);
-		$stmt->bindValue(':CONTENT', $blog['CONTENT'], SQLITE3_TEXT);		
+		$stmt->bindValue(':CONTENT', $blog['CONTENT'], SQLITE3_TEXT);	
+		$stmt->bindValue(':CONTENT_SUMMARY', $blog['CONTENT_SUMMARY'], SQLITE3_TEXT);	
 		$stmt->bindValue(':CONTENT_TYPE', $blog['CONTENT_TYPE'], SQLITE3_TEXT);
 		$stmt->bindValue(':CONTENT_PATH', $blog['CONTENT_PATH'], SQLITE3_TEXT);
 		$result = $stmt->execute();		
@@ -315,7 +318,7 @@ EOF;
 	*/   
    function get_json_blog($blog) {
    		$this->opendb();
-		$sql = 'SELECT BLOG_ID,TITLE,SEGMENT,PUBLISH_DTTM,STATUS,CONTENT,CONTENT_TYPE,CONTENT_PATH FROM BLOG WHERE BLOG_ID=:BLOG_ID';
+		$sql = 'SELECT BLOG_ID,TITLE,SEGMENT,PUBLISH_DTTM,STATUS,CONTENT,CONTENT_SUMMARY,CONTENT_TYPE,CONTENT_PATH FROM BLOG WHERE BLOG_ID=:BLOG_ID';
 		$stmt = $this->prepare($sql);
 		$stmt->bindValue(':BLOG_ID', $blog['BLOG_ID'], SQLITE3_TEXT);
 		$result = $stmt->execute();		
@@ -440,6 +443,7 @@ function get_blog_params() {
 	$blog['SEGMENT']=strtolower( preg_replace("/[^\w]+/", "-", get('blog-title')) );	
 	$blog['PUBLISH_DTTM']=str_replace("/","-",get('blog-publish-date')) . ' ' . get('blog-publish-hour') . ':' . get('blog-publish-minutes') . ':00';
 	$blog['CONTENT']=get('blog-editor');
+	$blog['CONTENT_SUMMARY']=get('blog-summary');
 	$blog['CONTENT_TYPE']=get('blog-type');
 	$blog['CONTENT_PATH']=get('blog-path');
 
@@ -454,6 +458,7 @@ function set_blog_params($blog) {
 	$_POST['blog-title']=$blog['TITLE'];
 	$_POST['blog-publish-status']=$blog['STATUS'];
 	$_POST['blog-editor']=$blog['CONTENT'];
+	$_POST['blog-summary']=$blog['CONTENT_SUMMARY'];
 	$_POST['blog-type']=$blog['CONTENT_TYPE'];
 	$_POST['blog-path']=$blog['CONTENT_PATH'];
 	
@@ -464,7 +469,7 @@ function set_blog_params($blog) {
  *  B.1 Create / Update the blog entry
  */
 function save_blog_entry($blog) {	
-	$db = new PstahlSqlite();
+	$db = new PstahlSqlite(); 
 	if(!$db) {
 		$_POST['popup_message'] = 'Cannot establish sqlite database connection. Please check your configuration.';
 		return false;
@@ -569,6 +574,14 @@ function is_valid_blog_entry() {
 		$_POST["info_message"] = 'Invalid date time format.';	
 		return FALSE;
 	}
+
+	// validate blog path
+	if( get('blog-type')=='P' && get('blog-path') == '' ) {
+		$_POST["info_message"] = 'Blog path cannot be empty.';	
+		return FALSE;
+	}
+
+
 	return TRUE;
 }	
 
@@ -647,6 +660,14 @@ function getset($arr,$key) {
 }
 
 
+function suf($str,$sufix='/') {
+	if( substr($str,-1) != '/' ) {
+		return $str . '/';
+	}
+	return $str;
+
+}
+
 
 /**
  *  IV. Export Processing
@@ -677,8 +698,8 @@ function export_blog_process($config,$env) {
 	global $_TEMPLATE_HOME;
 	global $_TEMPLATE_ARCHIVE;
 	$_INX = 'index.html';
-	$_BASE_URL = $config[$env.'_BASE_URL'] ; //'http://localhost/pstahl/db/cache/';
-	$_BASE_PATH = $config[$env.'_EXPORT_PATH']; //'db/cache/';
+	$_BASE_URL = suf( $config[$env.'_BASE_URL'] ); //'http://localhost/pstahl/db/cache/';
+	$_BASE_PATH = suf( $config[$env.'_EXPORT_PATH'] ); //'db/cache/';
 	$_PAGES_URL = $_BASE_URL.'pages/';
 	$_PAGES_PATH = $_BASE_PATH.'pages/';
 	$_ARCHIVES_URL = $_BASE_URL.'archives/';
@@ -707,7 +728,7 @@ function export_blog_process($config,$env) {
 	$db = new PstahlSqlite();
 	$db->opendb();
 		// 2.1 extract row count
-		$sql = 'SELECT COUNT(*) AS COUNT FROM BLOG WHERE STATUS="P" ';
+		$sql = 'SELECT COUNT(*) AS COUNT FROM BLOG WHERE STATUS="P" AND CONTENT_TYPE="B" ';
 		$result = $db->query($sql);
 		$row = $result->fetchArray(SQLITE3_ASSOC);
 		$_ROW_COUNT = $row['COUNT'];
@@ -722,14 +743,14 @@ function export_blog_process($config,$env) {
 		}
 
 		// 2.3 generate blog content
-		$sql = 'SELECT BLOG_ID,TITLE,SEGMENT,PUBLISH_DTTM,CONTENT FROM BLOG WHERE STATUS="P" AND CONTENT_TYPE="B" ORDER BY PUBLISH_DTTM DESC';
+		$sql = 'SELECT BLOG_ID,TITLE,SEGMENT,PUBLISH_DTTM,CONTENT,CONTENT_SUMMARY FROM BLOG WHERE STATUS="P" AND CONTENT_TYPE="B" ORDER BY PUBLISH_DTTM DESC';
 		$result = $db->query($sql);
 		$count = 1; $curpage = 1;
 		$archive_indexes = array();
 		$pages_indexes = array();
 		while($row = $result->fetchArray(SQLITE3_ASSOC) ) {
 			// identify publish datetime, segment sufix
-			list($MONTH, $DAY, $YEAR) = split('[/.-]',split(' ', $row['PUBLISH_DTTM'])[0]) ;
+			list($MONTH, $DAY, $YEAR) = explode('-',explode(' ', $row['PUBLISH_DTTM'])[0]) ;
 			$PUBLISHDTTM_TOTIME = strtotime("$MONTH/$DAY/$YEAR");
 			$SEGMENT_SUFIX = $row['SEGMENT'] . "-" . substr(filter_var($row['BLOG_ID'], FILTER_SANITIZE_NUMBER_INT), 0, 6); 
 
@@ -737,7 +758,7 @@ function export_blog_process($config,$env) {
 			$SEGMENT_PATH = "$_ARCHIVES_PATH$YEAR/$MONTH/" . $SEGMENT_SUFIX . "/";
 			$SEGMENT_URL = "$_ARCHIVES_URL$YEAR/$MONTH/" . $SEGMENT_SUFIX . "/";
 			$BLOG_PATH = "$_BASE_URL$YEAR/$MONTH/" . $SEGMENT_SUFIX . "/";
-			$SEGMENT_CONTENT = "<h2>".$row['TITLE']."</h2><p>".date("l \of F d, Y", $PUBLISHDTTM_TOTIME)."</p><p>".$row['CONTENT']."</p>";
+			$SEGMENT_CONTENT = "<h2>".$row['TITLE']."</h2><p class=\"ui-published-date\">".date("l \of F d, Y", $PUBLISHDTTM_TOTIME)."</p><article class=\"ui-content\">".$row['CONTENT']."</article>";
 			generate_directory($SEGMENT_PATH);
 
 			$SEGMENT_CONTENT = str_replace("\$pstahl{blog.section}",$SEGMENT_CONTENT,$_ARCHIVE_TPL);
@@ -745,19 +766,19 @@ function export_blog_process($config,$env) {
 			generate_index_file($SEGMENT_PATH,$SEGMENT_CONTENT);
 
 			// generate file on each month archive summary index			
-			$MONTH_INDEX_CONTENT = "<li><a href=\"$SEGMENT_URL\"><span>".date("Y F d", $PUBLISHDTTM_TOTIME)."</span>:<span>".$row['TITLE']."</span></a></li>";
+			$MONTH_INDEX_CONTENT = "<li><a href=\"$SEGMENT_URL\"><span>".date("Y F d", $PUBLISHDTTM_TOTIME)."</span>: <span>".$row['TITLE']."</span></a></li>";
 			$archive_indexes["$_ARCHIVES_PATH$YEAR/$MONTH/"] = getset($archive_indexes,"$_ARCHIVES_PATH$YEAR/$MONTH/") . $MONTH_INDEX_CONTENT;
 
-			$YEAR_INDEX_CONTENT = "<li><a href=\"$SEGMENT_URL\"><span>".date("Y F", $PUBLISHDTTM_TOTIME)."</span>:<span>".$row['TITLE']."</span></a></li>";
+			$YEAR_INDEX_CONTENT = "<li><a href=\"$SEGMENT_URL\"><span>".date("Y F", $PUBLISHDTTM_TOTIME)."</span>: <span>".$row['TITLE']."</span></a></li>";
 			$archive_indexes["$_ARCHIVES_PATH$YEAR/"] = getset($archive_indexes,"$_ARCHIVES_PATH$YEAR/") . $YEAR_INDEX_CONTENT;
 
-			$ARCHIVE_INDEX_CONTENT = "<li><a href=\"$SEGMENT_URL\"><span>".date("Y F", $PUBLISHDTTM_TOTIME)."</span>:<span>".$row['TITLE']."</span></a></li>";
+			$ARCHIVE_INDEX_CONTENT = "<li><a href=\"$SEGMENT_URL\"><span>".date("Y F", $PUBLISHDTTM_TOTIME)."</span>: <span>".$row['TITLE']."</span></a></li>";
 			$archive_indexes[$_ARCHIVES_PATH] = getset($archive_indexes,$_ARCHIVES_PATH) . $ARCHIVE_INDEX_CONTENT;
 
 			$curpage = ceil( $count / $_BLOG_PER_PAGE);
 			$ENTRY_PATH = $_PAGES_PATH.$curpage."/";
-			$ENTRY_CONTENT = "<h1><a href=\"$SEGMENT_URL\">".$row['TITLE']."</a></h1><p>".
-				date("Y F d", $PUBLISHDTTM_TOTIME)."</p><p>".$row['CONTENT']."</p>";
+			$ENTRY_CONTENT = "<h1><a href=\"$SEGMENT_URL\">".$row['TITLE']."</a></h1><p class=\"ui-published-date\">".
+				date("l \of F d, Y", $PUBLISHDTTM_TOTIME)."</p><summary class=\"ui-content-summary\" >".$row['CONTENT_SUMMARY']."</summary>";
 			$pages_indexes[$curpage] = getset($pages_indexes,intval($curpage)) . $ENTRY_CONTENT;
 
 			$count++;
@@ -773,12 +794,12 @@ function export_blog_process($config,$env) {
 		// 2.5 populate the pages indexes
 		foreach ($pages_indexes as $KEY => $INDEX_CONTENT) {
 			$INDEX_CONTENT = "<p>".$INDEX_CONTENT."</p>";
-			$PAGES = "";
-			for($i=1;$i<=$_BLOG_TOTAL_PAGES;$i++) {
-				$PAGES = $PAGES . "<li><a" . ($KEY==$i ? " class=\"ui-active\"" : " href=\"$_PAGES_URL$i/\"") .">$i</a></li>";
-				if($i>5 && $i<$_BLOG_TOTAL_PAGES-5) { $i = $_BLOG_TOTAL_PAGES-5; }
-			}
+			$PAGES = "";			
 			if( $_USE_PAGENUM ) {
+				for($i=1;$i<=$_BLOG_TOTAL_PAGES;$i++) {
+					$PAGES = $PAGES . "<li><a" . ($KEY==$i ? " class=\"ui-active\"" : " href=\"$_PAGES_URL$i/\"") .">$i</a></li>";
+					if($i>5 && $i<$_BLOG_TOTAL_PAGES-5) { $i = $_BLOG_TOTAL_PAGES-5; }
+				}
 				$PAGES = "<ul class=\"\">".$PAGES."</ul>";	
 			}				
 
@@ -794,7 +815,7 @@ function export_blog_process($config,$env) {
 				$PAGES_QUICK = "<div><span><a href=\"".$_PAGES_URL. ($_BLOG_TOTAL_PAGES-1) . "/\">Newer &lt;&lt;&lt;</a></span></div>";	
 			}
 
-			if($PAGES_QUICK!="") {
+			if( $PAGES_QUICK!="" ) {
 				$PAGES_QUICK = "<div>" . $PAGES_QUICK . "</div>";
 				if( $_USE_PAGEQUICK ) {
 					$PAGES = $PAGES . $PAGES_QUICK;	
@@ -806,7 +827,7 @@ function export_blog_process($config,$env) {
 
 			$INDEX_CONTENT = str_replace("\$pstahl{blog.section}",$INDEX_CONTENT,$_PAGE_TPL);
 			generate_index_file($_PAGES_PATH.$KEY."/",$INDEX_CONTENT);
-		}
+		}		
 		copy($_PAGES_PATH."1/index.html",$_BASE_PATH."index.html");
 
 		// 2.6 generate pages content
@@ -816,7 +837,7 @@ function export_blog_process($config,$env) {
 			$SEGMENT_CONTENT = "<h2>".$row['TITLE']."</h2><p>".$row['CONTENT']."</p>";
 			$SEGMENT_CONTENT = str_replace("\$pstahl{blog.section}",$SEGMENT_CONTENT,$_PAGE_TPL);
 			$SEGMENT_CONTENT = str_replace("\$pstahl{title}",$_PAGE_TITLE." | ". strtolower($row['TITLE']),$SEGMENT_CONTENT);
-			generate_index_file($_BASE_PATH.$row['CONTENT_PATH'],$SEGMENT_CONTENT);
+			generate_index_file($_BASE_PATH.suf($row['CONTENT_PATH']),$SEGMENT_CONTENT);
 		}
 
 	$db->close();	
@@ -923,9 +944,16 @@ function export_blog_process($config,$env) {
 		 *  CKEDITOR initialized textarea editor
 		 */
 		$(function() {			
-			if( $("#blog-editor").length ===0 ) return;
+			if( $("#blog-editor").length ===0 ) return;			
 			
 			CKEDITOR.replace( 'blog-editor', {
+				allowedContent: true,
+				extraAllowedContent: '*{*}',
+			} );
+
+			if( $("#blog-summary").length ===0 ) return;			
+
+			CKEDITOR.replace( 'blog-summary', {
 				allowedContent: true,
 				extraAllowedContent: '*{*}',
 			} );
@@ -976,8 +1004,8 @@ function export_blog_process($config,$env) {
 								$(tags).each(function(i,e){
 									tag=tag+e['TAG']+',';
 								});
-
-								populate_create_form(rowData[0][0],rowData[0][1],tag,rowData[0][3].replace(/-/g, '/'),rowData[0][4],data['CONTENT'],data['CONTENT_TYPE'],data['CONTENT_PATH']);								
+								populate_create_form(rowData[0][0],rowData[0][1],tag,rowData[0][3].replace(/-/g, '/'),rowData[0][4],data['CONTENT'],data['CONTENT_SUMMARY'],data['CONTENT_TYPE'],data['CONTENT_PATH']);								
+								$('#blog-type').trigger('change')
 							});								
 							
 						});					
@@ -992,7 +1020,7 @@ function export_blog_process($config,$env) {
 		/**
 		 *  3. Create / Update form population
 		 */
-		function populate_create_form(blogid, title, tags, publishdate, status, content, blogtype, blogpath) {
+		function populate_create_form(blogid, title, tags, publishdate, status, content, contentsummary, blogtype, blogpath) {
 											
 			$('#blog-id').val(blogid)
 			$('#blog-title').val(title);			
@@ -1002,6 +1030,7 @@ function export_blog_process($config,$env) {
 			$('#blog-publish-status').val( !status||status==''?'D':status );			
 
 			CKEDITOR.instances['blog-editor'].setData( content&&content!='' ? content : '' ); 
+			CKEDITOR.instances['blog-summary'].setData( contentsummary&&contentsummary!='' ? contentsummary : '' ); 
 
 			d = (publishdate && publishdate!='') ? new Date(publishdate) : new Date();
 			day = d.getDate();
@@ -1112,7 +1141,7 @@ function export_blog_process($config,$env) {
 		</div>
 		<!-- -->
 
-		<!-- -->
+		<!-- #create-blog -->
 		<div id="create-blog" class="tab-pane fade">    
 			<h3>Create</h3>
 			<?php if( $_POST["info_message"]!='' ):?>
@@ -1150,9 +1179,6 @@ function export_blog_process($config,$env) {
 						</div>
 					</div>
 
-							
-						
-
 					<div class="form-group form-inline">
 						<label for="blog-publish-date">Publish Date</label>
 						<input name="blog-publish-date" id="blog-publish-date" type="text" class="form-control input-sm" autocomplete="off" 
@@ -1180,6 +1206,11 @@ function export_blog_process($config,$env) {
 					
 				</p>
 				<p>
+					<label for="blog-summary">Blog Summary</label>
+					<textarea name="blog-summary" id="blog-summary"><?=get('blog-summary')?></textarea>
+				</p>
+				<p>
+					<label for="blog-editor">Blog Content</label>
 					<textarea name="blog-editor" id="blog-editor"><?=get('blog-editor')?></textarea>
 					<input name="action" id="action" type="hidden" value="save-blog"> 
 					<input name="blog-id" id="blog-id" type="hidden" value="<?=get('blog-id')?>"> 
@@ -1191,9 +1222,9 @@ function export_blog_process($config,$env) {
 				</form>
 			</div><!-- /.ui-save-blog -->
     	</div>
-    	<!-- -->
+    	<!-- /#create-blog -->
 
-    	<!-- -->
+    	<!-- #export-blog -->
     	<div id="export-blog" class="tab-pane fade">
 			<h3>Export</h3>
 			<form action="" method="POST" class="form" role="form">
@@ -1238,9 +1269,9 @@ function export_blog_process($config,$env) {
 				<button id="btn-export-blog" class="btn btn-default" >Export</button>
 			</form>
 		</div>
-		<!-- -->
+		<!-- /#export-blog -->
 
-		<!-- -->
+		<!-- #preview-blog -->
     	<div id="preview-blog" class="tab-pane fade">
 			<h3>Preview</h3>
 			<form>
@@ -1248,7 +1279,7 @@ function export_blog_process($config,$env) {
 				<a id="preview-blog-link" href="#" target="_BLANK">Generated Previewed Content</iframe>
 			</form>			
 		</div>
-		<!-- -->
+		<!-- /#preview-blog -->
   </div>
 
 </div>
