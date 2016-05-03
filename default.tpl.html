@@ -12,58 +12,42 @@
       <script src="https://oss.maxcdn.com/respond/1.4.2/respond.min.js"></script>
     <![endif]-->
     <style type="text/css">
-      body,div,p { font-family: monospace, Consolas, 'Courier New'; font-size: 12px; } footer { text-align:justify; } 
+      body { background:#F6F6F6; font-family: monospace, Consolas, 'Courier New'; font-size: 12px; } 
+
+      footer { text-align:justify; } 
 
       h1 { font-size: 24px; }
 
-      body {background:#F6F6F6;}
-nav.navbar-clear {border:none; background:none; box-shadow: none; margin:0px; padding:0px; } 
+      summary.ui-content-summary { font-size: 14px; }
 
-.navbar .navbar-nav {
+      article.ui-content { font-size: 14px; }
 
-  display: inline-block;
-  float: none;
-  vertical-align: top;
-  font-size: 18px;
-  text-transform: uppercase;
+      nav.navbar-clear { border:none; background:none; box-shadow: none; margin:0px; padding:0px; } 
 
-}
+      .navbar .navbar-nav { display: inline-block; float: none; vertical-align: top; font-size: 18px; text-transform: uppercase; }
+      .navbar .navbar-collapse { text-align: center; }
+      .navbar-default .navbar-nav > .active{ background: none; color: #337ab7; }
+      .navbar-default .navbar-nav > .active > a, 
+      .navbar-default .navbar-nav > .active > a:hover, 
+      .navbar-default .navbar-nav > .active > a:focus { background: none; box-shadow: none; color: #337ab7; }
 
-.navbar .navbar-collapse {
-  text-align: center;
-}
+      div.ui-older { float: left; }
 
+      div.ui-newer { float: right; }
 
-.navbar-default .navbar-nav > .active{
-    color: #337ab7;
-   background: none;
- }
- .navbar-default .navbar-nav > .active > a, 
- .navbar-default .navbar-nav > .active > a:hover, 
- .navbar-default .navbar-nav > .active > a:focus {
-      color: #337ab7;
-      background: none;
-      box-shadow: none;
- }
+      div.title h2 { color: #2B2B2B; margin:0px 0px 30px 0px; padding:0px; font-weight:; font-family: 'open sans', 'source sans pro', 'helvetica neue', helvetica, arial, verdana, sans-serif; line-height: 1.1 }
 
+      div.ui-blog-section { margin:0px; padding:0px; }
 
-div.title h2 { color: #2B2B2B; margin:0px 0px 30px 0px; padding:0px; font-weight:; font-family: 'open sans', 'source sans pro', 'helvetica neue', helvetica, arial, verdana, sans-serif; line-height: 1.1 }
+      ul.ui-archive-list { margin:0px; padding:0px; list-style:none;  } 
 
-@media (min-width: 800px) {
-    .container{
-        max-width: 600px;
-    }
-}
+      @media (min-width: 800px) { .container{ max-width: 600px; } }
 
-    </style>
+    </style>    
   </head>
   <body>
     <div class="container">
-      
-      
-
-
-<!-- div.navbar-static-top -->
+      <!-- div.navbar-static-top -->
       <nav class="navbar navbar-default navbar-clear">
         <div class="container" >
           <div class="navbar-header" >
@@ -76,17 +60,17 @@ div.title h2 { color: #2B2B2B; margin:0px 0px 30px 0px; padding:0px; font-weight
           </div>
           <div id="navbar" class="navbar-collapse collapse">
             <ul class="nav navbar-nav text-center">
-              <li class="active"><a href="$pstahl{baseurl}">Home</a></li> 
-              <li><a href="$pstahl{baseurl}archives/">Archives</a></li>
-              <li><a href="$pstahl{baseurl}projects/">Projects</a></li>
-              <li><a href="$pstahl{baseurl}pictures/">Pictures</a></li>
+              <li class="ui-item-home" ><a href="$pstahl{baseurl}">Home</a></li> 
+              <li class="ui-item-archives" ><a href="$pstahl{baseurl}archives/">Archives</a></li>
+              <li class="ui-item-projects" ><a href="$pstahl{baseurl}projects/">Projects</a></li>
+              <li class="ui-item-pictures" ><a href="$pstahl{baseurl}pictures/">Pictures</a></li>
             </ul>            
           </div> 
           <div class="container text-center title"><h2>RANKARU.COM&nbsp;&nbsp;</h2></div>                  
         </div>
       </nav>
       <!-- /.navbar-static-top -->
-      <div class="container">            
+      <div class="container ui-blog-section">            
         $pstahl{blog.section}
       </div>
 
@@ -95,5 +79,13 @@ div.title h2 { color: #2B2B2B; margin:0px 0px 30px 0px; padding:0px; font-weight
     </div>
     <script src="https://ajax.googleapis.com/ajax/libs/jquery/1.11.3/jquery.min.js"></script>
     <script src="//maxcdn.bootstrapcdn.com/bootstrap/3.3.5/js/bootstrap.min.js" type="text/javascript" integrity="sha512-K1qjQ+NcF2TYO/eI3M6v8EiNYZfA95pQumfvcVrTHtwQVDG+aHRqLi/ETn2uB+1JqwYqVG3LIvdm9lj6imS/pQ==" crossorigin="anonymous"></script>
+    <script type="text/javascript">
+      $(document).ready(function(){    
+          if( window.location.href.indexOf('archives') > 0 ) { $('li.ui-item-archives').attr('class','active'); }
+          else if( window.location.href.indexOf('projects') > 0 ) { $('li.ui-item-projects').attr('class','active'); }
+          else if( window.location.href.indexOf('pictures') > 0 ) { $('li.ui-item-pictures').attr('class','active'); }
+          else { $('li.ui-item-home').attr('class','active'); }
+      });
+    </script>
   </body>
 </html>
