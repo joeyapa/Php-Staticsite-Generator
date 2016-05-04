@@ -49,8 +49,7 @@
 
 	Development default directory structure
 	index.php
-	home.tpl.html -- basic home template file
-	archive.tpl.html -- basic archive template file
+	default.tpl.html -- default template file
 	db\* -- everything is dumped on this directory
 	db\cache\* -- general purpose temporary directory
 	db\pstahl-sqlite.db -- database
@@ -64,8 +63,8 @@
 
 	
 	Future Changes
-	1. Batch blog generation. This is 
-	2. 
+	1. Batch blog generation. Currently blogs are generated in one go, if the blog post exceed threshold
+	  it will throw memory issues.
 
 */
 
@@ -77,9 +76,8 @@
 $_SQLITE_DATABASE_PATH = 'db/pstahl-sqlite.db';
 $_ADMIN_EMAIL_LOGIN = 'z@z.z';
 $_ADMIN_PASSWORD = '1';
-$_PSTAHL_VERSION = '1';
-$_TEMPLATE_ARCHIVE = 'default.tpl.html';
-$_TEMPLATE_HOME = 'default.tpl.html';
+$_PSTAHL_VERSION = '2';
+$_TEMPLATE_PAGE = 'default.tpl.html';
 
 
 /**
@@ -101,6 +99,8 @@ if(!$pstahldb) {
 	echo $pstahldb->lastErrorMsg();
 	$_POST['popup_message'] = 'Cannot establish sqlite database connection. Please check your configuration.';
 }
+
+
 
 /**
  *  I. Controller Section
@@ -153,8 +153,21 @@ switch ( true ) {
 	case isset($_SESSION["user_session"]) && isset($_POST['action']) && $_POST['action']=='list-config' :		
 		list_config();	
 		break;		
+	// I. save template
+	case isset($_SESSION["user_session"]) && isset($_POST['action']) && $_POST['action']=='save-template' :		
+		$content = get('blog-template');
+		if($content != '') {
+			$content = base64_decode( rawUrlDecode( $content) );
+			write_file($_TEMPLATE_PAGE, $content);	
+		}		
+		break;	
+		
 }
 
+//-- I.1 quick draw. defining the template page load on this section.
+if ( isset($_SESSION["user_session"]) ) {
+	$_POST['blog-template'] = read_file( $_TEMPLATE_PAGE );	
+}
 
 /**
  *  II. Database
@@ -606,9 +619,7 @@ function generate_directory($dirpath) {
  *  D.2 Generate the file.
  */
 function generate_file($filename,$content) {
-	$file = fopen($filename, "w") or die("Unable to open file!");	
-	fwrite($file, preg_replace(array('/\s{2,}/','/[\t\n]/'),' ',$content));
-	fclose($file);
+	write_file($filename, preg_replace(array('/\s{2,}/','/[\t\n]/'),' ',$content));
 }
 
 
@@ -620,6 +631,15 @@ function generate_index_file($filepath,$content) {
 		mkdir($filepath, 0700, true);
 	}	
 	generate_file($filepath."index.html", $content);
+}
+
+/*
+ *  D.2.2 Write to a file
+ */
+function write_file($filename,$content) {
+	$file = fopen($filename, "w") or die("Unable to open file!");	
+	fwrite($file, $content);
+	fclose($file);
 }
 
 /*
@@ -695,8 +715,7 @@ function export_blog($config) {
 function export_blog_process($config,$env) {
 
 	// i. pre-defined contants
-	global $_TEMPLATE_HOME;
-	global $_TEMPLATE_ARCHIVE;
+	global $_TEMPLATE_PAGE;
 	$_INX = 'index.html';
 	$_BASE_URL = suf( $config[$env.'_BASE_URL'] ); //'http://localhost/pstahl/db/cache/';
 	$_BASE_PATH = suf( $config[$env.'_EXPORT_PATH'] ); //'db/cache/';
@@ -713,10 +732,8 @@ function export_blog_process($config,$env) {
 	$_USE_PAGEQUICK = TRUE;
 
 	// ii. preload templates
-	$_PAGE_TPL = str_replace("\$pstahl{baseurl}",$_BASE_URL,read_file($_TEMPLATE_HOME));
+	$_PAGE_TPL = str_replace("\$pstahl{baseurl}",$_BASE_URL,read_file($_TEMPLATE_PAGE));
 	$_PAGE_TPL = str_replace("\$pstahl{title}",$_PAGE_TITLE,$_PAGE_TPL);
-	$_ARCHIVE_TPL = str_replace("\$pstahl{baseurl}",$_BASE_URL,read_file($_TEMPLATE_ARCHIVE));
-	$_ARCHIVE_TPL = str_replace("\$pstahl{title}",$_ARCHIVE_TITLE,$_ARCHIVE_TPL);
 
 
 
@@ -761,8 +778,9 @@ function export_blog_process($config,$env) {
 			$SEGMENT_CONTENT = "<h2>".$row['TITLE']."</h2><p class=\"ui-published-date\">".date("l \of F d, Y", $PUBLISHDTTM_TOTIME)."</p><article class=\"ui-content\">".$row['CONTENT']."</article>";
 			generate_directory($SEGMENT_PATH);
 
-			$SEGMENT_CONTENT = str_replace("\$pstahl{blog.section}",$SEGMENT_CONTENT,$_ARCHIVE_TPL);
+			$SEGMENT_CONTENT = str_replace("\$pstahl{blog.section}",$SEGMENT_CONTENT,$_PAGE_TPL);
 			$SEGMENT_CONTENT = str_replace("\$pstahl{title}",$_ARCHIVE_TITLE." | ". strtolower($row['TITLE']),$SEGMENT_CONTENT);
+			$SEGMENT_CONTENT = str_replace("\$pstahl{currenturl}",$SEGMENT_URL,$SEGMENT_CONTENT);
 			generate_index_file($SEGMENT_PATH,$SEGMENT_CONTENT);
 
 			// generate file on each month archive summary index			
@@ -787,7 +805,7 @@ function export_blog_process($config,$env) {
 		// 2.4 populate the archive indexes
 		foreach ($archive_indexes as $KEY => $INDEX_CONTENT) {
 			$INDEX_CONTENT = "<ul class=\"ui-archive-list\">".$INDEX_CONTENT."</ul>";
-			$INDEX_CONTENT = str_replace("\$pstahl{blog.section}", $INDEX_CONTENT, $_ARCHIVE_TPL) ;
+			$INDEX_CONTENT = str_replace("\$pstahl{blog.section}", $INDEX_CONTENT, $_PAGE_TPL) ;
 			generate_index_file($KEY,$INDEX_CONTENT);
 		}
 
@@ -837,6 +855,7 @@ function export_blog_process($config,$env) {
 			$SEGMENT_CONTENT = "<h2>".$row['TITLE']."</h2><p>".$row['CONTENT']."</p>";
 			$SEGMENT_CONTENT = str_replace("\$pstahl{blog.section}",$SEGMENT_CONTENT,$_PAGE_TPL);
 			$SEGMENT_CONTENT = str_replace("\$pstahl{title}",$_PAGE_TITLE." | ". strtolower($row['TITLE']),$SEGMENT_CONTENT);
+			$SEGMENT_CONTENT = str_replace("\$pstahl{currenturl}",$SEGMENT_URL,$SEGMENT_CONTENT);
 			generate_index_file($_BASE_PATH.suf($row['CONTENT_PATH']),$SEGMENT_CONTENT);
 		}
 
@@ -876,6 +895,8 @@ function export_blog_process($config,$env) {
 
 		table.ui-blog-list { width:100%;}
 		
+		#blog-template { height:600px; width:100%; }
+
 		#blog-publish-date{ display:inline-block; width:88px; text-align:center; }
 		#blog-publish-hour, #blog-publish-minutes { display:inline-block; width:38px; text-align:center; }
 	</style>
@@ -934,6 +955,8 @@ function export_blog_process($config,$env) {
 				$('.nav-create-blog a').tab('show');
 			<?php elseif( $_POST['action']=='export-blog' ) : ?>
 				$('.nav-export-blog a').tab('show');
+			<?php elseif( $_POST['action']=='save-template' ) : ?>
+				$('.nav-manage-template a').tab('show');
 			<?php else: ?>
 				$('.nav-list-blog a').tab('show');
 			<?php endif; ?>
@@ -957,6 +980,8 @@ function export_blog_process($config,$env) {
 				allowedContent: true,
 				extraAllowedContent: '*{*}',
 			} );
+
+
 			
 		});			
 		
@@ -1126,12 +1151,13 @@ function export_blog_process($config,$env) {
 	<ul class="nav nav-tabs">		
 		<li class="active nav-list-blog"><a href="#list-blog">Blogs</a></li>
 		<li class="nav-create-blog sr-only"><a href="#create-blog">Create Blog</a></li>		
+		<li class="nav-manage-template"><a href="#manage-template">Manage Template</a></li>
 		<li class="nav-export-blog"><a href="#export-blog">Export</a></li>
 		<li class="nav-preview-blog"><a href="#preview-blog">Preview</a></li>
 	</ul>
 
 	<div class="tab-content">
-  		<!-- -->  		
+  		<!-- #list-blog -->  		
 		<div id="list-blog" class="tab-pane fade in active">	
 			<h3>Blogs</h3>
 			<p>
@@ -1139,7 +1165,7 @@ function export_blog_process($config,$env) {
 			</p>
 			<table id="blog-list" class="table ui-blog-list" cellpadding="0" cellspacing="0"></table>
 		</div>
-		<!-- -->
+		<!-- /#list-blog -->
 
 		<!-- #create-blog -->
 		<div id="create-blog" class="tab-pane fade">    
@@ -1223,6 +1249,31 @@ function export_blog_process($config,$env) {
 			</div><!-- /.ui-save-blog -->
     	</div>
     	<!-- /#create-blog -->
+
+
+    	<div id="manage-template" class="tab-pane fade">
+    		<h3>Manage Template</h3>
+    		<p>Allow you to manage the defined site template <a href="#">[<?php echo $_TEMPLATE_PAGE; ?>]</a>.</p>
+    		<div>
+    			<form id="form-blog-template" action="" method="POST" role="form" >
+    			<p>
+    			<label for="blog-template">Blog Page Template</label>
+				<textarea name="blog-template" id="blog-template"><?=get('blog-template')?></textarea>
+				</p>
+				<p>
+    			<input type="button" class="btn btn-default" value="Save " onclick="filter_blog_template(this)" />
+    			<input name="action" type="hidden" value="save-template" /> 		
+    			</p>
+    			</form>
+    		</div>
+    		<script type="text/javascript">
+    			function filter_blog_template() {
+    				$('#blog-template').val( encodeURIComponent( window.btoa( $('#blog-template').val() ) ) );
+    				$('#form-blog-template').submit();    		
+    			}
+    		</script>
+    	</div>
+
 
     	<!-- #export-blog -->
     	<div id="export-blog" class="tab-pane fade">
