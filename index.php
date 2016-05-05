@@ -315,7 +315,7 @@ EOF;
 	function list_json_blog() {
 		$this->initialize();
 		$this->opendb();
-		$sql = 'SELECT BLOG_ID,TITLE,SEGMENT,PUBLISH_DTTM,STATUS FROM BLOG WHERE STATUS!="R" ORDER BY PUBLISH_DTTM DESC';
+		$sql = 'SELECT BLOG_ID,TITLE,SEGMENT,PUBLISH_DTTM,STATUS FROM BLOG WHERE STATUS!="R" ORDER BY DATETIME(PUBLISH_DTTM) DESC';
 		$result = $this->query($sql);
 		$arr = array();
 		while($row = $result->fetchArray(SQLITE3_ASSOC) ) {
@@ -760,7 +760,7 @@ function export_blog_process($config,$env) {
 		}
 
 		// 2.3 generate blog content
-		$sql = 'SELECT BLOG_ID,TITLE,SEGMENT,PUBLISH_DTTM,CONTENT,CONTENT_SUMMARY FROM BLOG WHERE STATUS="P" AND CONTENT_TYPE="B" ORDER BY PUBLISH_DTTM DESC';
+		$sql = 'SELECT BLOG_ID,TITLE,SEGMENT,PUBLISH_DTTM,CONTENT,CONTENT_SUMMARY FROM BLOG WHERE STATUS="P" AND CONTENT_TYPE="B" ORDER BY DATETIME(PUBLISH_DTTM) DESC';
 		$result = $db->query($sql);
 		$count = 1; $curpage = 1;
 		$archive_indexes = array();
@@ -849,7 +849,7 @@ function export_blog_process($config,$env) {
 		copy($_PAGES_PATH."1/index.html",$_BASE_PATH."index.html");
 
 		// 2.6 generate pages content
-		$sql = 'SELECT BLOG_ID,TITLE,SEGMENT,PUBLISH_DTTM,CONTENT,CONTENT_PATH FROM BLOG WHERE STATUS="P" AND CONTENT_TYPE="P" ORDER BY PUBLISH_DTTM DESC';
+		$sql = 'SELECT BLOG_ID,TITLE,SEGMENT,PUBLISH_DTTM,CONTENT,CONTENT_PATH FROM BLOG WHERE STATUS="P" AND CONTENT_TYPE="P" ORDER BY DATETIME(PUBLISH_DTTM) DESC';
 		$result = $db->query($sql);
 		while($row = $result->fetchArray(SQLITE3_ASSOC) ) {
 			$SEGMENT_CONTENT = "<h2>".$row['TITLE']."</h2><p>".$row['CONTENT']."</p>";
