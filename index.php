@@ -207,13 +207,13 @@ class PstahlSqlite extends SQLite3 {
 			  TITLE               TEXT              NOT NULL,
 			  SEGMENT             TEXT              NOT NULL,
 			  STATUS              CHAR(1)           NOT NULL   DEFAULT 'P',			  
-			  PUBLISH_DTTM        DATETIME,
-			  CREATED_DTTM        DATETIME          NOT NULL   DEFAULT CURRENT_TIMESTAMP,
-			  LAST_UPDATED_DTTM   DATETIME          NOT NULL,
 			  CONTENT             TEXT,
 			  CONTENT_SUMMARY     TEXT,
 			  CONTENT_TYPE        CHAR(1)           NOT NULL   DEFAULT 'B',
-			  CONTENT_PATH        TEXT              NULL );
+			  CONTENT_PATH        TEXT              NULL, 
+			  PUBLISH_DTTM        DATETIME,
+			  CREATED_DTTM        DATETIME          NOT NULL   DEFAULT CURRENT_TIMESTAMP,
+			  LAST_UPDATED_DTTM   DATETIME          NOT NULL );
 
 			CREATE INDEX BLOG_CREATED_DTTM ON BLOG (CREATED_DTTM);
 			CREATE INDEX BLOG_LAST_UPDATED_DTTM ON BLOG (LAST_UPDATED_DTTM);
@@ -454,7 +454,14 @@ function get_blog_params() {
 	$blog['TAGS']=get('blog-tags');
 	$blog['STATUS']=get('blog-publish-status');
 	$blog['SEGMENT']=strtolower( preg_replace("/[^\w]+/", "-", get('blog-title')) );	
-	$blog['PUBLISH_DTTM']=str_replace("/","-",get('blog-publish-date')) . ' ' . get('blog-publish-hour') . ':' . get('blog-publish-minutes') . ':00';
+
+	$publishdate = '';
+	if( get('blog-publish-date') != '' ) {
+		$publishdate = DateTime::createFromFormat('m/d/Y', get('blog-publish-date'));
+		$publishdate = $publishdate->format('Y-m-d');	
+	}	
+
+	$blog['PUBLISH_DTTM']=$publishdate . ' ' . get('blog-publish-hour') . ':' . get('blog-publish-minutes') . ':00';
 	$blog['CONTENT']=get('blog-editor');
 	$blog['CONTENT_SUMMARY']=get('blog-summary');
 	$blog['CONTENT_TYPE']=get('blog-type');
@@ -717,8 +724,8 @@ function export_blog_process($config,$env) {
 	// i. pre-defined contants
 	global $_TEMPLATE_PAGE;
 	$_INX = 'index.html';
-	$_BASE_URL = suf( $config[$env.'_BASE_URL'] ); //'http://localhost/pstahl/db/cache/';
-	$_BASE_PATH = suf( $config[$env.'_EXPORT_PATH'] ); //'db/cache/';
+	$_BASE_URL = suf( $config[$env.'_BASE_URL'] );
+	$_BASE_PATH = suf( $config[$env.'_EXPORT_PATH'] ); 
 	$_PAGES_URL = $_BASE_URL.'pages/';
 	$_PAGES_PATH = $_BASE_PATH.'pages/';
 	$_ARCHIVES_URL = $_BASE_URL.'archives/';
@@ -767,7 +774,7 @@ function export_blog_process($config,$env) {
 		$pages_indexes = array();
 		while($row = $result->fetchArray(SQLITE3_ASSOC) ) {
 			// identify publish datetime, segment sufix
-			list($MONTH, $DAY, $YEAR) = explode('-',explode(' ', $row['PUBLISH_DTTM'])[0]) ;
+			list($YEAR, $MONTH, $DAY) = explode('-',explode(' ', $row['PUBLISH_DTTM'])[0]) ;
 			$PUBLISHDTTM_TOTIME = strtotime("$MONTH/$DAY/$YEAR");
 			$SEGMENT_SUFIX = $row['SEGMENT'] . "-" . substr(filter_var($row['BLOG_ID'], FILTER_SANITIZE_NUMBER_INT), 0, 6); 
 
@@ -980,8 +987,6 @@ function export_blog_process($config,$env) {
 				allowedContent: true,
 				extraAllowedContent: '*{*}',
 			} );
-
-
 			
 		});			
 		
@@ -1057,7 +1062,7 @@ function export_blog_process($config,$env) {
 			CKEDITOR.instances['blog-editor'].setData( content&&content!='' ? content : '' ); 
 			CKEDITOR.instances['blog-summary'].setData( contentsummary&&contentsummary!='' ? contentsummary : '' ); 
 
-			d = (publishdate && publishdate!='') ? new Date(publishdate) : new Date();
+			d = (publishdate && publishdate!='') ? new Date( Date.parse(publishdate) ) : new Date(); console.info(publishdate,d);
 			day = d.getDate();
 			month = d.getMonth() + 1; //month: 0-11
 			year = d.getFullYear();
