@@ -73,10 +73,11 @@
  *  i. Configuration
  *  ----------------------------------------------------------------------------------------------------
  */
+$_SQLITE_DATABASE_PATH_LIST = array('db/pstahl-sqlite.db');
 $_SQLITE_DATABASE_PATH = 'db/pstahl-sqlite.db';
 $_ADMIN_EMAIL_LOGIN = 'z@z.z';
 $_ADMIN_PASSWORD = '1';
-$_PSTAHL_VERSION = '2';
+$_PSTAHL_VERSION = '3';
 $_TEMPLATE_PAGE = 'default.tpl.html';
 
 
@@ -93,13 +94,6 @@ foreach($form_fields as $fname) {
 }
 
 
-//-- ii.b connect to the database
-$pstahldb = new PstahlSqlite();
-if(!$pstahldb) {
-	echo $pstahldb->lastErrorMsg();
-	$_POST['popup_message'] = 'Cannot establish sqlite database connection. Please check your configuration.';
-}
-
 
 
 /**
@@ -107,6 +101,23 @@ if(!$pstahldb) {
  *  ----------------------------------------------------------------------------------------------------
  */
 session_start();
+
+//-- I.i identify database, connect to the identified database
+
+$_SQLITE_DATABASE_PATH = isset($_SESSION['SQLITE_DATABASE_PATH']) ? $_SESSION['SQLITE_DATABASE_PATH'] : $_SQLITE_DATABASE_PATH;
+
+
+$pstahldb = new PstahlSqlite();
+if(!$pstahldb) {
+	echo $pstahldb->lastErrorMsg();
+	$_POST['popup_message'] = 'Cannot establish sqlite database connection. Please check your configuration.';
+}
+
+$arr = $pstahldb->list_config();
+if( isset($arr['TEMPLATE_PAGE']) && $arr['TEMPLATE_PAGE']!='' ) {
+	$_SESSION['TEMPLATE_PAGE'] = $arr['TEMPLATE_PAGE'];
+}
+$_TEMPLATE_PAGE = isset($_SESSION['TEMPLATE_PAGE']) ? $_SESSION['TEMPLATE_PAGE'] : $_TEMPLATE_PAGE;
 
 switch ( true ) {
 	// A. login authentication
@@ -147,7 +158,8 @@ switch ( true ) {
 	// G. export site
 	case isset($_SESSION["user_session"]) && isset($_POST['action']) && $_POST['action']=='export-blog' :		
 		$config = save_config();		
-		export_blog($config);	
+		export_blog($config);
+		$_SESSION['TEMPLATE_PAGE'] = $config['TEMPLATE_PAGE'];
 		break;		
 	// H. list configuration
 	case isset($_SESSION["user_session"]) && isset($_POST['action']) && $_POST['action']=='list-config' :		
@@ -161,7 +173,11 @@ switch ( true ) {
 			write_file($_TEMPLATE_PAGE, $content);	
 		}		
 		break;	
-		
+	// J. database selection
+	case isset($_SESSION["user_session"]) && isset($_POST['action']) && $_POST['action']=='select-database' :		
+		$_SESSION['SQLITE_DATABASE_PATH'] = $_SQLITE_DATABASE_PATH_LIST[ (int)get('selected-db-index') ];		
+		header("Refresh:0");
+		break;		
 }
 
 //-- I.1 quick draw. defining the template page load on this section.
@@ -400,7 +416,8 @@ EOF;
    /*
     * J. Save config map
     */	      
-   function save_config($pstahl_config) {
+   function save_config($pstahl_config) {   		
+
    		$this->opendb();
    		$sql = 'DELETE FROM PSTAHL_CONFIG';
    		$result = $this->query($sql);
@@ -540,6 +557,8 @@ function get_blog_entry($blog) {
  *  B.5 List all the config 
  */	
 function list_config() {
+	global $_TEMPLATE_PAGE;
+
 	$db = new PstahlSqlite();
 	$arr = $db->list_config();
 	if( !isset($arr['HEADER_TITLE']) ) {  $arr['HEADER_TITLE'] = 'Pstahl | Php Static Html Builder'; }
@@ -547,6 +566,7 @@ function list_config() {
 	if( !isset($arr['TEST_BASE_URL']) ) {  $arr['TEST_BASE_URL'] = 'http://' . $_SERVER['HTTP_HOST'] . str_replace("index.php","",$_SERVER['REQUEST_URI']) . $arr['TEST_EXPORT_PATH'] ; }
 	if( !isset($arr['PROD_EXPORT_PATH']) ) {  $arr['PROD_EXPORT_PATH'] = 'db/cache/prod/'; }
 	if( !isset($arr['PROD_BASE_URL']) ) {  $arr['PROD_BASE_URL'] = 'http://' . $_SERVER['HTTP_HOST'] . str_replace("index.php","",$_SERVER['REQUEST_URI']) . $arr['PROD_EXPORT_PATH'] ; }
+	if( !isset($arr['TEMPLATE_PAGE']) ) {  $arr['TEMPLATE_PAGE'] = $_TEMPLATE_PAGE; }		
 	echo json_encode( $arr );
 	exit(1);
 }
@@ -555,6 +575,8 @@ function list_config() {
  *  B.6 Save the given config file
  */
 function save_config() {
+	global $_TEMPLATE_PAGE;
+
 	$config_pstahl = array();
 	$config_pstahl['HEADER_TITLE']=get('html-header-title');
 	$config_pstahl['TEST_EXPORT_PATH']=get('test-export-path');
@@ -565,7 +587,8 @@ function save_config() {
 	$config_pstahl['IS_EXPORT_COMPRESSED']=get('is-export-compressed','N');
 	$config_pstahl['EXPORT_BUILD_TEST']=get('export-build-test','N');
 	$config_pstahl['EXPORT_BUILD_PROD']=get('export-build-prod','N');	
-
+	$config_pstahl['TEMPLATE_PAGE']=get('template-page',$_TEMPLATE_PAGE);
+	
 	$db = new PstahlSqlite();
 	if(!$db) {
 		$_POST['popup_message'] = 'Cannot establish sqlite database connection. Please check your configuration.';
@@ -1091,6 +1114,7 @@ function export_blog_process($config,$env) {
 			$('#test-base-url').val(configs['TEST_BASE_URL']);
 			$('#prod-export-path').val(configs['PROD_EXPORT_PATH']);
 			$('#prod-base-url').val(configs['PROD_BASE_URL']);
+			$('#template-page').val(configs['TEMPLATE_PAGE']);
 
 			$('#is-export-exploded').attr('checked',configs['IS_EXPORT_EXPLODED']=='Y'?true:false);
 			$('#is-export-compressed').attr('checked',configs['IS_EXPORT_COMPRESSED']=='Y'?true:false);
@@ -1141,6 +1165,7 @@ function export_blog_process($config,$env) {
 			<ul class="dropdown-menu">
 			<li><a href="#" data-toggle="modal" data-target="#check-updates-pstahl">Check for Update</a></li>
 			<li><a href="#" data-toggle="modal" data-target="#about-pstahl">About Pstahl</a></li>
+			<li><a href="#" data-toggle="modal" data-target="#select-database-pstahl">Database</a></li>
 			<li role="separator" class="divider"></li>
 			<li><a href="?signout=session">Sign out</a></li>
 			</ul>
@@ -1311,6 +1336,13 @@ function export_blog_process($config,$env) {
 						<input id="prod-base-url" name="prod-base-url" type="text" class="form-control" value="">
 					</div>
 				</div>
+				<div class="row">
+					<div class="form-group col-xs-4">
+						<label for="export-path-prod">Template Path:</label>
+						<input id="template-page" name="template-page" type="text" class="form-control" value="">
+					</div>									
+				</div>
+
 				<div class="form-group">
 					<label for="usr">Export Flags:</label>
 					<div class="checkbox">
@@ -1391,6 +1423,42 @@ function export_blog_process($config,$env) {
 		</div>
 	</div>
 	<!-- /.END Modal: Delete blog -->
+	<!-- Modal: Select database --> 
+	<div id="select-database-pstahl" class="modal fade" role="dialog">
+		<div class="modal-dialog">
+			<form action="#" method="POST">
+		    <div class="modal-content">
+				<div class="modal-header"><button type="button" class="close" data-dismiss="modal">&times;</button>
+					<h4 class="modal-title">Select Database</h4>
+				</div>
+				<div class="modal-body">				
+					<p>
+					<select name="selected-db-index" class="form-control input-sm">
+						<?php
+							$index_count = 0;
+							foreach ($_SQLITE_DATABASE_PATH_LIST as $value) {
+								if( $value == $_SQLITE_DATABASE_PATH ) {
+									echo "<option value='$index_count' selected='selected'>$value</option>";	
+								}
+								else {
+									echo "<option value='$index_count'>$value</option>";	
+								}								
+								$index_count++;
+							}
+						?>
+					</select>
+					<input type="hidden" name="action" value="select-database" />
+					</p>
+				</div>
+				<div class="modal-footer">
+					<input id="btn-select-database" type="submit" class="btn btn-primary" value="Select" />
+					<button type="button" class="btn btn-default" data-dismiss="modal">Cancel</button>
+				</div>
+			</div>
+			</form>
+		</div>
+	</div>
+	<!-- /.END Modal: Select database -->				
 </div>
 
 
