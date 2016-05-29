@@ -112,6 +112,7 @@ if(!$pstahldb) {
 	echo $pstahldb->lastErrorMsg();
 	$_POST['popup_message'] = 'Cannot establish sqlite database connection. Please check your configuration.';
 }
+$pstahldb->initialize();
 
 $arr = $pstahldb->list_config();
 if( isset($arr['TEMPLATE_PAGE']) && $arr['TEMPLATE_PAGE']!='' ) {
