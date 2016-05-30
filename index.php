@@ -620,11 +620,15 @@ function is_valid_blog_entry() {
 	}
 
 	// validate blog path
-	if( get('blog-type')=='P' && get('blog-path') == '' ) {
+	if( get('blog-type')=='P' && get('blog-path') == '' && get('blog-path') != '&' ) {
 		$_POST["info_message"] = 'Blog path cannot be empty.';	
 		return FALSE;
 	}
-
+	
+	// allows bypass for first page
+	if( get('blog-path') != '&' ) {
+		$_POST['blog-path']='';
+	}
 
 	return TRUE;
 }	
@@ -860,7 +864,7 @@ function export_blog_process($config,$env) {
 				$PAGES_QUICK = "<div class=\"ui-newer\"><span><a href=\"".$_PAGES_URL. ($KEY+1) . "/\">Older &gt;&gt;&gt;</a></span></div>" .
 				"<div><span><a href=\"".$_PAGES_URL. ($KEY-1) . "/\">Newer &lt;&lt;&lt;</a></span></div>";					
 			}
-			else if($KEY==$_BLOG_TOTAL_PAGES) {
+			else if($KEY==$_BLOG_TOTAL_PAGES && $_BLOG_TOTAL_PAGES>1) {
 				$PAGES_QUICK = "<div><span><a href=\"".$_PAGES_URL. ($_BLOG_TOTAL_PAGES-1) . "/\">Newer &lt;&lt;&lt;</a></span></div>";	
 			}
 
@@ -878,6 +882,7 @@ function export_blog_process($config,$env) {
 			generate_index_file($_PAGES_PATH.$KEY."/",$INDEX_CONTENT);
 		}		
 		copy($_PAGES_PATH."1/index.html",$_BASE_PATH."index.html");
+		copy($_PAGES_PATH."1/index.html",$_PAGES_PATH."index.html");
 
 		// 2.6 generate pages content
 		$sql = 'SELECT BLOG_ID,TITLE,SEGMENT,PUBLISH_DTTM,CONTENT,CONTENT_PATH FROM BLOG WHERE STATUS="P" AND CONTENT_TYPE="P" ORDER BY DATETIME(PUBLISH_DTTM) DESC';
