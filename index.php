@@ -6,7 +6,7 @@
 
 	The MIT License (MIT)
 
-	Copyright (c) 2015 Joey Albert Abano		
+	Copyright (c) 2015-2016 Joey Albert Abano		
 
 	Permission is hereby granted, free of charge, to any person obtaining a copy
 	of this software and associated documentation files (the "Software"), to deal
@@ -60,6 +60,7 @@
 	archives\index.html -- blog summary
 	archives\<year-month>\index.html -- list of blogs in that year-month
 	archives\<year-month>\<segment>-id\index.html
+	photo\<uploaddttm>\<IMG_,THB_,WEB_><filename>.JPG
 
 	
 	Future Changes
@@ -73,8 +74,9 @@
  *  i. Configuration
  *  ----------------------------------------------------------------------------------------------------
  */
-$_SQLITE_DATABASE_PATH_LIST = array('db/pstahl-sqlite.db');
+$_SQLITE_DATABASE_PATH_LIST = array(array('db'=>'db/pstahl1-sqlite.db','photo'=>'db/cache1/'), array('db'=>'db/pstahl2-sqlite.db','photo'=>'db/cache2/'));
 $_SQLITE_DATABASE_PATH = 'db/pstahl-sqlite.db';
+$_PHOTOPATH = "db/cache1/";
 $_ADMIN_EMAIL_LOGIN = 'z@z.z';
 $_ADMIN_PASSWORD = '1';
 $_PSTAHL_VERSION = '3';
@@ -94,8 +96,6 @@ foreach($form_fields as $fname) {
 }
 
 
-
-
 /**
  *  I. Controller Section
  *  ----------------------------------------------------------------------------------------------------
@@ -105,6 +105,7 @@ session_start();
 //-- I.i identify database, connect to the identified database
 
 $_SQLITE_DATABASE_PATH = isset($_SESSION['SQLITE_DATABASE_PATH']) ? $_SESSION['SQLITE_DATABASE_PATH'] : $_SQLITE_DATABASE_PATH;
+$_PHOTOPATH = isset($_SESSION['PHOTOPATH']) ? $_SESSION['PHOTOPATH'] : $_PHOTOPATH;
 
 
 $pstahldb = new PstahlSqlite();
@@ -176,9 +177,48 @@ switch ( true ) {
 		break;	
 	// J. database selection
 	case isset($_SESSION["user_session"]) && isset($_POST['action']) && $_POST['action']=='select-database' :		
-		$_SESSION['SQLITE_DATABASE_PATH'] = $_SQLITE_DATABASE_PATH_LIST[ (int)get('selected-db-index') ];		
+		$_SESSION['SQLITE_DATABASE_PATH'] = $_SQLITE_DATABASE_PATH_LIST[ (int)get('selected-db-index') ]['db'];		
+		$_SESSION['PHOTOPATH'] = $_SQLITE_DATABASE_PATH_LIST[ (int)get('selected-db-index') ]['photo'];		
 		header("Refresh:0");
 		break;		
+	// K. photo upload
+	case isset($_SESSION["user_session"]) && isset($_POST['action']) && $_POST['action']=='photo-upload' :
+		upload_photo();
+		header('Content-Type: application/json');
+		echo json_encode( list_photo() );
+		die();	
+	// L. photo list
+	case isset($_SESSION["user_session"]) && isset($_POST['action']) && $_POST['action']=='photo-list' :
+		header('Content-Type: application/json');
+		echo json_encode( list_photo($_POST['search']) );
+		die();
+	// M. photo update
+	case isset($_SESSION["user_session"]) && isset($_POST['action']) && $_POST['action']=='photo-update' :
+		header('Content-Type: application/json');
+		update_photo($_POST['photoid'],$_POST['description']);
+		echo json_encode( list_photo() );
+		die();
+	// N. photo delete
+	case isset($_SESSION["user_session"]) && isset($_POST['action']) && $_POST['action']=='photo-delete' :
+		header('Content-Type: application/json');
+		delete_photo($_POST['photoid']);
+		echo json_encode( list_photo() );
+		die();		
+	// O. photo get
+	case isset($_GET['pid']) :
+		/*  Redirection 
+			header("Location: http://" . $_SERVER['HTTP_HOST'] . explode('?', $_SERVER['REQUEST_URI'], 2)[0] . get_photo($_GET['pid']) ); 
+		 */ 
+		$blob = get_photo($_GET['pid'], $_PHOTOPATH, "http://" . $_SERVER['HTTP_HOST'] . explode('?', $_SERVER['REQUEST_URI'], 2)[0], FALSE );
+		if($blob === FALSE) {
+			header('Content-Type: application/json');
+			echo '{"image-result":"not found"}';
+		}
+		else {
+			header('Content-type: image/png');
+			include( $blob );				
+		}		
+		die();		
 }
 
 //-- I.1 quick draw. defining the template page load on this section.
@@ -206,20 +246,20 @@ class PstahlSqlite extends SQLite3 {
 	*/   
    function create_pstahl_tables () {
 		$sql_create_pstahl_tables =<<<EOF
-			CREATE TABLE PSTAHL_INFO (
+			CREATE TABLE IF NOT EXISTS PSTAHL_INFO (
 			  VERSION         INT     	  NOT NULL,
 			  SITE_TITLE      TEXT,
 			  CREATED_DTTM    DATETIME    NOT NULL   DEFAULT   CURRENT_TIMESTAMP,      
 			  LAST_ACCESSED   DATETIME    NOT NULL );
 
-			CREATE TABLE PSTAHL_CONFIG (
+			CREATE TABLE IF NOT EXISTS PSTAHL_CONFIG (
 			  KEY             TEXT     	  NOT NULL,
 			  VALUE           TEXT     	  NOT NULL );
 			
 
 			INSERT INTO PSTAHL_INFO (VERSION,LAST_ACCESSED) VALUES (1,CURRENT_TIMESTAMP);
 
-			CREATE TABLE BLOG (
+			CREATE TABLE IF NOT EXISTS BLOG (
 			  BLOG_ID             CHAR(200)         PRIMARY KEY   NOT NULL,
 			  TITLE               TEXT              NOT NULL,
 			  SEGMENT             TEXT              NOT NULL,
@@ -232,20 +272,34 @@ class PstahlSqlite extends SQLite3 {
 			  CREATED_DTTM        DATETIME          NOT NULL   DEFAULT CURRENT_TIMESTAMP,
 			  LAST_UPDATED_DTTM   DATETIME          NOT NULL );
 
-			CREATE INDEX BLOG_CREATED_DTTM ON BLOG (CREATED_DTTM);
-			CREATE INDEX BLOG_LAST_UPDATED_DTTM ON BLOG (LAST_UPDATED_DTTM);
+			CREATE INDEX IF NOT EXISTS BLOG_CREATED_DTTM ON BLOG (CREATED_DTTM);
+			CREATE INDEX IF NOT EXISTS BLOG_LAST_UPDATED_DTTM ON BLOG (LAST_UPDATED_DTTM);
 			
-			CREATE TABLE TAGS (
+			CREATE TABLE IF NOT EXISTS TAGS (
 			  BLOG_ID        INT          NOT NULL,
 			  TAG            CHAR(200)    NOT NULL );
 
-			CREATE INDEX TAGS_BLOG_ID ON TAGS (BLOG_ID);
-			CREATE INDEX TAGS_TAG ON TAGS (TAG);
+			CREATE INDEX IF NOT EXISTS TAGS_BLOG_ID ON TAGS (BLOG_ID);
+			CREATE INDEX IF NOT EXISTS TAGS_TAG ON TAGS (TAG);
 
-			CREATE TABLE EXPORTS (
+			CREATE TABLE IF NOT EXISTS EXPORTS (
 			  BLOG_ID        INT                   NOT NULL,
 			  STATUS         CHAR(1)   DEFAULT 'R' NOT NULL,
 			  EXPORT_DTTM    DATETIME );
+
+			CREATE TABLE IF NOT EXISTS PHOTO (
+			  PHOTO_ID     INTEGER      PRIMARY KEY AUTOINCREMENT  NOT NULL,
+			  DESCRIPTION  STRING (400) NOT NULL  DEFAULT Anonymous,
+			  IMAGE        BLOB         NOT NULL,
+			  URL_NAME     STRING (200) NOT NULL,
+    		  URL_PATH     STRING (200) NOT NULL,
+    		  FLAG_STATUS    CHAR (1)     DEFAULT A NOT NULL,
+			  CREATED_DTTM DATETIME     DEFAULT (CURRENT_TIMESTAMP)  NOT NULL
+			);
+
+			CREATE INDEX IF NOT EXISTS PHOTO_CREATED_DTTM ON PHOTO (CREATED_DTTM);
+			CREATE INDEX IF NOT EXISTS PHOTO_DESCRIPTION ON PHOTO (DESCRIPTION);
+
 EOF;
 
 		$ret = $this->exec($sql_create_pstahl_tables);
@@ -267,7 +321,7 @@ EOF;
 		$this->opendb();
 		$ret = $this->query('SELECT count(name) as count FROM sqlite_master WHERE type="table" AND name in ("PSTAHL_INFO","BLOG","TAGS","EXPORTS")');
 		$row = $ret->fetchArray(SQLITE3_ASSOC);
-		if( $row['count'] == 0 ) {
+		if( $row['count'] != 6 ) {
 			$this->create_pstahl_tables();
 		}
 		$this->query('UPDATE PSTAHL_INFO SET LAST_ACCESSED = CURRENT_TIMESTAMP WHERE VERSION = ' . $_PSTAHL_VERSION);
@@ -433,7 +487,7 @@ EOF;
    		$this->close();	
 
    		return $this->list_config();
-   }   
+   }      
 
 }
 
@@ -599,8 +653,201 @@ function save_config() {
 	return $db->save_config($config_pstahl);	
 }		
 
+
 /**
- *  C.1 Validate blog entry before performing save_blog_entry()
+ *  C.1 Photo Uploading
+ */
+function upload_photo() {
+	$fc = 0; $mg = ''; $bl = 0;
+	while ( isset( $_FILES["file".$fc] ) ) {
+		if ( upload_file( $_FILES["file".$fc] ) ) {
+			$mg = $mg . '"'.$fc.'":"success",';				
+			$bl = $bl + 1;
+		}
+		else {
+			$mg = $mg . '"'.$fc.'":"failed",';
+		}			
+		$fc++;
+
+	}	
+}
+
+/**
+ *  C.2 JPEG File Uploading
+ */
+function upload_file($file) {
+	global $_PHOTOPATH;
+	global $_SQLITE_DATABASE_PATH;
+	
+	$success = false;
+
+	if ( !is_dir($_PHOTOPATH.'photo/') ) { mkdir($_PHOTOPATH.'photo/', 0700, true); }
+
+	$target_file = $_PHOTOPATH .'photo/' . basename($file["name"]);
+	$imageFileType = pathinfo($target_file,PATHINFO_EXTENSION);
+	$fname = $file["tmp_name"];
+	$description = 'Initial image upload with an orignal name of [' . basename($file["name"]) . '] and an upload date of ['.date("Y-m-d h:i:sa").'].';
+
+	if($fname!==NULL&&trim($fname)!=="") {
+		$check = getimagesize($fname);		
+		if($check !== false && move_uploaded_file($file["tmp_name"], $target_file) ) {        		
+			$scaledphoto = scale_photo(basename($file["name"]), $_PHOTOPATH .'photo/' );
+			$db = new SQLite3($_SQLITE_DATABASE_PATH);
+			$stmt = $db->prepare("INSERT INTO PHOTO (DESCRIPTION,IMAGE,URL_NAME,URL_PATH) VALUES (:DESCRIPTION,:IMAGE,:URL_NAME,:URL_PATH) ");
+			$image=file_get_contents($target_file);
+			$stmt->bindValue('DESCRIPTION', $description, SQLITE3_TEXT);
+			$stmt->bindValue('IMAGE', $image, SQLITE3_BLOB);		
+			$stmt->bindValue('URL_NAME', $scaledphoto['URL_NAME'], SQLITE3_TEXT);
+			$stmt->bindValue('URL_PATH', $scaledphoto['URL_PATH'], SQLITE3_TEXT);
+			$stmt->execute();
+			$success = true;
+			rename($target_file, $target_file.'.'.$scaledphoto['URL_NAME']);
+		}
+	}
+		
+	return $success;       	
+}	
+
+/**
+ *  C.3 Photo listing
+ */
+function list_photo($search=NULL) {
+	global $_SQLITE_DATABASE_PATH;
+	$db = new SQLite3($_SQLITE_DATABASE_PATH);
+	$sql = "SELECT PHOTO_ID,DESCRIPTION,URL_NAME,URL_PATH,CREATED_DTTM FROM PHOTO WHERE FLAG_STATUS='A' ";
+	if($search!==NULL && gettype($search)=='string') { $sql = $sql . " AND DESCRIPTION LIKE :DESCRIPTION "; }
+	$sql = $sql . "ORDER BY CREATED_DTTM DESC";
+
+	$stmt = $db->prepare($sql); //echo $sql; echo '['.$search.']';
+
+	if($search!==NULL && gettype($search)=='string') { $stmt->bindValue('DESCRIPTION', '%'.$search.'%', SQLITE3_TEXT); }
+	
+	$result = $stmt->execute();
+	$arr = array();
+	while($row = $result->fetchArray(SQLITE3_ASSOC) ) {
+		array_push($arr, $row);			
+	}
+
+	return $arr;
+}
+
+/**
+ *  C.4 Photo retrival
+ */
+function get_photo($pid,$basepath,$urlpath,$flagurl=TRUE) {
+	global $_SQLITE_DATABASE_PATH;	
+
+	$db = new SQLite3($_SQLITE_DATABASE_PATH);
+	$stmt = $db->prepare("SELECT * FROM PHOTO WHERE PHOTO_ID=:PHOTO_ID");
+	$stmt->bindValue('PHOTO_ID', $pid, SQLITE3_INTEGER);	
+	$result = $stmt->execute();
+	$photo = FALSE; 
+	$photo_url = FALSE;
+	
+	while($row = $result->fetchArray(SQLITE3_ASSOC) ) {	 $photo=$row; break; }
+	if($photo !== FALSE) {
+		$photo_path = $basepath.'photo/'.$photo['URL_PATH'].'/IMG_'.$photo['URL_NAME'].'.JPG'; 		
+		$photo_url = $urlpath.'photo/'.$photo['URL_PATH'].'/IMG_'.$photo['URL_NAME'].'.JPG';
+		if( !file_exists($photo_path) ) {
+			if ( !is_dir($basepath.'photo/') ) { mkdir($basepath.'photo/', 0700, true); }
+			$file = fopen($basepath.'photo/'.$photo['URL_NAME'].'.JPG', "w") or die("Unable to open file!");
+			fwrite($file, $row['IMAGE']);
+			scale_photo($photo['URL_NAME'].'.JPG',$basepath.'photo/',$photo['URL_NAME'],$photo['URL_PATH']); 			
+		}
+		$photo = $photo_path;
+	}
+
+	return $flagurl===TRUE ? $photo_url : $photo;
+}
+
+/**
+ *  C.5 Photo scaling
+ */
+function scale_photo($filename,$filepath,$uid=NULL,$filemtime=NULL) {			
+
+	$imgsize = @getimagesize($filepath);
+	$imgwidth = $imgsize[0];
+	$imgheight = $imgsize[1];
+
+	$uid = $uid==NULL ? strtoupper(uniqid()) : $uid; // generate unique identifier
+	$nuid = $uid.'.JPG';
+	$timg_uid = 'THB_'.$nuid;
+	$wimg_uid = 'WEB_'.$nuid;
+	$oimg_uid = 'IMG_'.$nuid;
+	$filemtime = $filemtime===NULL ? filemtime($filepath.$filename) : $filemtime; // retrieve file modification time
+
+	if ( !is_dir( $filepath . $filemtime ) ) {
+		mkdir( $filepath . $filemtime , 0700, true);
+	}
+	
+	if( $imgwidth > $imgheight ) { // landscape	    		
+		$resource = imagescale( imagecreatefromjpeg($filepath.$filename) , 128);
+		imagejpeg($resource , $filepath . $filemtime . '/' . $timg_uid);	
+		$resource = imagescale( imagecreatefromjpeg($filepath.$filename) , 512); // 512x320
+		imagejpeg($resource , $filepath . $filemtime . '/' . $wimg_uid);			  			
+		$resource = imagescale( imagecreatefromjpeg($filepath.$filename) , 1280); // 1280x800
+		imagejpeg($resource , $filepath . $filemtime . '/' . $oimg_uid);	
+	}
+	else { // portrait
+		$resource = imagescale( imagecreatefromjpeg($filepath.$filename) , 128);
+		imagejpeg($resource , $filepath . $filemtime . '/' . $timg_uid);	
+		$resource = imagescale( imagecreatefromjpeg($filepath.$filename) , 320); 
+		imagejpeg($resource , $filepath . $filemtime . '/' . $wimg_uid);			  			
+		$resource = imagescale( imagecreatefromjpeg($filepath.$filename) , 800);
+		imagejpeg($resource , $filepath . $filemtime . '/' . $oimg_uid);	
+	}	
+
+	return array('URL_PATH'=>$filemtime, 'URL_NAME'=>$uid );
+}
+
+/**
+ *  C.6 Photo update
+ */
+function update_photo($photoid,$description) {
+	global $_SQLITE_DATABASE_PATH;
+	$db = new SQLite3($_SQLITE_DATABASE_PATH);
+	$stmt = $db->prepare("UPDATE PHOTO SET DESCRIPTION=:DESCRIPTION WHERE PHOTO_ID=:PHOTO_ID");
+	$stmt->bindValue('PHOTO_ID', $photoid, SQLITE3_INTEGER);	
+	$stmt->bindValue('DESCRIPTION', $description, SQLITE3_TEXT);
+	$stmt->execute();	
+}
+
+/**
+ *  C.7 Photo delete
+ */
+function delete_photo($photoid) {
+	global $_SQLITE_DATABASE_PATH;
+	$db = new SQLite3($_SQLITE_DATABASE_PATH);
+	$stmt = $db->prepare("UPDATE PHOTO SET FLAG_STATUS='D' WHERE PHOTO_ID=:PHOTO_ID");
+	$stmt->bindValue('PHOTO_ID', $photoid, SQLITE3_INTEGER);	
+	$stmt->execute();	
+}
+
+/**
+ *  C.8 Photo mapping
+ */
+function map_photo($content, $basepath, $baseurl) { 
+	$typ = array('pid','pidt','pidw');
+	for($j=0;$j<count($typ);$j++) {
+		$regex = '/\$pstahl{'.$typ[$j].'=(.*?)}/';
+		preg_match_all($regex, $content, $match); 
+		if( count($match) > 1 ) {		
+			for($i=0;$i<count($match[0]);$i++) {		
+				$photo = get_photo($match[1][$i], $basepath, $baseurl);	
+				if( $typ[$j]=='pidt' ) { $photo = str_replace('IMG_', 'THB_', $photo); }
+				if( $typ[$j]=='pidw' ) { $photo = str_replace('IMG_', 'WEB_', $photo); }
+				$imgobj = '<img class="pstahl-img" src="'.$photo.'"/>';		
+				$content = str_replace($match[0][$i], $imgobj, $content);			
+			}
+		}	
+	}
+
+	return $content;
+}
+
+
+/**
+ *  D.1 Validate blog entry before performing save_blog_entry()
  */
 function is_valid_blog_entry() {
 	// pad zeros for the hour and minute fields
@@ -635,7 +882,7 @@ function is_valid_blog_entry() {
 
 
 /*
- *  C.2 Validate datetime string format
+ *  D.2 Validate datetime string format
  */
 function is_date_valid($date, $format = 'm/d/Y H:i') { // 'Y-m-d H:i:s'
     $d = DateTime::createFromFormat($format, $date);
@@ -643,7 +890,7 @@ function is_date_valid($date, $format = 'm/d/Y H:i') { // 'Y-m-d H:i:s'
 }
 
 /* 
- *  D.1 Generated directory. 
+ *  E.1 Generated directory. 
  */
 function generate_directory($dirpath) {
 	rrmdir($dirpath); 
@@ -651,7 +898,7 @@ function generate_directory($dirpath) {
 } 
 
 /*
- *  D.2 Generate the file.
+ *  E.2 Generate the file.
  */
 function generate_file($filename,$content) {
 	write_file($filename, preg_replace(array('/\s{2,}/','/[\t\n]/'),' ',$content));
@@ -659,7 +906,7 @@ function generate_file($filename,$content) {
 
 
 /*
- *  D.2.1 Generate the file, extended generate_file
+ *  E.2.1 Generate the file, extended generate_file
  */
 function generate_index_file($filepath,$content) {	
 	if (!is_dir($filepath)) {
@@ -669,7 +916,7 @@ function generate_index_file($filepath,$content) {
 }
 
 /*
- *  D.2.2 Write to a file
+ *  E.2.2 Write to a file
  */
 function write_file($filename,$content) {
 	$file = fopen($filename, "w") or die("Unable to open file!");	
@@ -678,7 +925,7 @@ function write_file($filename,$content) {
 }
 
 /*
- *  D.3 Read file content. this method is to be used for small file sizes.
+ *  E.3 Read file content. this method is to be used for small file sizes.
  */
 function read_file($filename) {
 	$read = '';
@@ -692,7 +939,7 @@ function read_file($filename) {
 }
 
 /*
- *  D.4 Remove directory and file recursively.
+ *  E.4 Remove directory and file recursively.
  */
 function rrmdir($dir) { 
    if (is_dir($dir)) { 
@@ -708,13 +955,15 @@ function rrmdir($dir) {
 } 
 
 /*
- *  E. Retrieve the value in an array, default to empty
+ *  F. Retrieve the value in an array, default to empty
  */
 function getset($arr,$key) {
 	return isset($arr) && is_array($arr) && array_key_exists($key,$arr) ? $arr[$key] : "";
 }
 
-
+/*
+ *  F. Appending suffix
+ */
 function suf($str,$sufix='/') {
 	if( substr($str,-1) != '/' ) {
 		return $str . '/';
@@ -770,8 +1019,6 @@ function export_blog_process($config,$env) {
 	$_PAGE_TPL = str_replace("\$pstahl{baseurl}",$_BASE_URL,read_file($_TEMPLATE_PAGE));
 	$_PAGE_TPL = str_replace("\$pstahl{title}",$_PAGE_TITLE,$_PAGE_TPL);
 
-
-
 	// 1. run the process in the background. recommended that it is shot at an ajax request. check the status based on the db
 	ignore_user_abort(true); 
 	set_time_limit(0);
@@ -805,6 +1052,8 @@ function export_blog_process($config,$env) {
 			list($YEAR, $MONTH, $DAY) = explode('-',explode(' ', $row['PUBLISH_DTTM'])[0]) ;
 			$PUBLISHDTTM_TOTIME = strtotime("$MONTH/$DAY/$YEAR");
 			$SEGMENT_SUFIX = $row['SEGMENT'] . "-" . substr(filter_var($row['BLOG_ID'], FILTER_SANITIZE_NUMBER_INT), 0, 6); 
+			$SUMMARY_CONTENT = $row['CONTENT_SUMMARY'];
+			$SUMMARY_CONTENT = map_photo($SUMMARY_CONTENT,$_BASE_PATH,$_BASE_URL);
 
 			// generate directories and file on each segment			
 			$SEGMENT_PATH = "$_ARCHIVES_PATH$YEAR/$MONTH/" . $SEGMENT_SUFIX . "/";
@@ -816,6 +1065,7 @@ function export_blog_process($config,$env) {
 			$SEGMENT_CONTENT = str_replace("\$pstahl{blog.section}",$SEGMENT_CONTENT,$_PAGE_TPL);
 			$SEGMENT_CONTENT = str_replace("\$pstahl{title}",$_ARCHIVE_TITLE." | ". strtolower($row['TITLE']),$SEGMENT_CONTENT);
 			$SEGMENT_CONTENT = str_replace("\$pstahl{currenturl}",$SEGMENT_URL,$SEGMENT_CONTENT);
+			$SEGMENT_CONTENT = map_photo($SEGMENT_CONTENT,$_BASE_PATH,$_BASE_URL);
 			generate_index_file($SEGMENT_PATH,$SEGMENT_CONTENT);
 
 			// generate file on each month archive summary index			
@@ -831,7 +1081,7 @@ function export_blog_process($config,$env) {
 			$curpage = ceil( $count / $_BLOG_PER_PAGE);
 			$ENTRY_PATH = $_PAGES_PATH.$curpage."/";
 			$ENTRY_CONTENT = "<h1><a href=\"$SEGMENT_URL\">".$row['TITLE']."</a></h1><p class=\"ui-published-date\">".
-				date("l \of F d, Y", $PUBLISHDTTM_TOTIME)."</p><summary class=\"ui-content-summary\" >".$row['CONTENT_SUMMARY']."</summary>";
+				date("l \of F d, Y", $PUBLISHDTTM_TOTIME)."</p><summary class=\"ui-content-summary\" >".$SUMMARY_CONTENT."</summary>";
 			$pages_indexes[$curpage] = getset($pages_indexes,intval($curpage)) . $ENTRY_CONTENT;
 
 			$count++;
@@ -877,7 +1127,6 @@ function export_blog_process($config,$env) {
 
 			$INDEX_CONTENT = $INDEX_CONTENT . $PAGES;
 
-
 			$INDEX_CONTENT = str_replace("\$pstahl{blog.section}",$INDEX_CONTENT,$_PAGE_TPL);
 			generate_index_file($_PAGES_PATH.$KEY."/",$INDEX_CONTENT);
 		}		
@@ -892,6 +1141,7 @@ function export_blog_process($config,$env) {
 			$SEGMENT_CONTENT = str_replace("\$pstahl{blog.section}",$SEGMENT_CONTENT,$_PAGE_TPL);
 			$SEGMENT_CONTENT = str_replace("\$pstahl{title}",$_PAGE_TITLE." | ". strtolower($row['TITLE']),$SEGMENT_CONTENT);
 			$SEGMENT_CONTENT = str_replace("\$pstahl{currenturl}",$SEGMENT_URL,$SEGMENT_CONTENT);
+			$SEGMENT_CONTENT = map_photo($SEGMENT_CONTENT,$_BASE_PATH,$_BASE_URL);
 			generate_index_file($_BASE_PATH.suf($row['CONTENT_PATH']),$SEGMENT_CONTENT);
 		}
 
@@ -935,6 +1185,37 @@ function export_blog_process($config,$env) {
 
 		#blog-publish-date{ display:inline-block; width:88px; text-align:center; }
 		#blog-publish-hour, #blog-publish-minutes { display:inline-block; width:38px; text-align:center; }
+
+		span.btn-file { position: relative; overflow: hidden; }
+		span.btn-file input[type=file] { 
+			background: white; cursor: inherit; display: block; font-size: 100px;
+			min-height: 100%; min-width: 100%; opacity: 0; outline: none; position: absolute; 
+		    right: 0; text-align: right; filter: alpha(opacity=0);  top: 0; 		    
+		}
+
+		div.ui-picture { background:#cfcfcf; border: solid 1px #999; display:inline-block; margin:4px; padding:4px; }
+		#picture-lightbox textarea.description { border:none; margin:0px; padding:0px; height:52px; width:90%;   }
+		div.ui-pic-wrap { background:#000; overflow:hidden; }				
+		div.ui-pic-wrap img {
+			-webkit-transition: all 0.2s ease; /* Safari and Chrome */
+			-moz-transition: all 0.2s ease; /* Firefox */
+			-o-transition: all 0.2s ease; /* IE 9 */
+			-ms-transition: all 0.2s ease; /* Opera */
+			transition: all 0.2s ease;
+			
+		}
+		div.ui-pic-wrap:hover img {
+			-webkit-transform:scale(1.50); /* Safari and Chrome */
+			-moz-transform:scale(1.50); /* Firefox */
+			-ms-transform:scale(1.50); /* IE 9 */
+			-o-transform:scale(1.50); /* Opera */
+			transform:scale(1.50);
+			zoom: 1;
+			filter: alpha(opacity=50);
+			opacity: 0.5;		
+		}	
+
+		* { border-radius: 0 !important; }
 	</style>
 	
 	<script src="//ajax.googleapis.com/ajax/libs/jquery/2.1.4/jquery.min.js" type="text/javascript"></script>		
@@ -961,6 +1242,16 @@ function export_blog_process($config,$env) {
 			// trigger blog list refresher
 			display_blog_list({updatedttm:null,blogs:[]});		
 			display_export_configuration();	
+
+			// trigger picture list
+			display_picture_list();
+
+			// allow image upload on file selection
+			$('#file-upload').change( ajax_upload );
+			$('#file-search').keyup( search_picture_list );
+			$('#picture-lightbox textarea').keyup( update_picture_description );
+			$('#picture-lightbox button.delete').click( delete_picture );
+			$('#picture-lightbox button.save').click( function(e){ update_picture_description(e); $('#picture-lightbox').modal('hide'); } );
 
 			// create blog button redirect
 			$('#btn-create-blog').click(function(){
@@ -1015,12 +1306,120 @@ function export_blog_process($config,$env) {
 			CKEDITOR.replace( 'blog-summary', {
 				allowedContent: true,
 				extraAllowedContent: '*{*}',
-			} );
-			
-		});			
-		
+			} );				
+		});	
+
 		/**
-		 *  2. Blog table list
+		 *  2. Photo management
+		 *  
+		 */
+		function ajax_upload() {							
+			var fd = new FormData();
+			for(i=0;i<this.files.length;i++){
+				fd.append("file"+i, this.files[i]);					
+			}
+			fd.append('action','photo-upload');
+
+			fd.append("a", "p");		
+ 
+ 			$('#modal-loader').modal({show:true, keyboard:false, backdrop:'static'});
+
+			$.ajax({
+			 url: 'index.php',
+			 type: 'POST',
+			 data: fd,
+			 async: false,
+			 cache: false,
+			 processData: false,
+			 contentType: false,	     
+			 enctype: 'multipart/form-data'	     
+			}).done(function(ar){
+				setTimeout(function(){
+					$('#modal-loader').modal('hide');
+					render_picture_list(ar);
+				},1000);				
+			}).error(function(ex){
+				console.error(ex);
+				$('#modal-loader').find('div.modal-body').html('Uploading error. Ensure your are uploading a JPG image.');
+			});
+
+			return false;
+		}		
+				
+		var searcht;
+		function search_picture_list(e) {
+			e.stopPropagation();
+			clearTimeout(searcht);
+			searcht = setTimeout(function(){
+				display_picture_list();
+			},1000);			
+		}
+
+		function display_picture_list() {
+			var search = $('#file-search').val();
+
+			$.ajax({ url: "index.php", dataType:'json', method:'POST', data:('action=photo-list&search='+search), cache:false, context: document.body }).done(function(ar) {
+				render_picture_list(ar);									
+			}).error(function(er){
+				console.debug('error:',er);
+			});													
+		}
+
+		function render_picture_list(ar) {
+			var list = '';
+			for(i=0;i<ar.length;i++){ 
+				var imgsrc = '<?php echo $_PHOTOPATH; ?>photo/'+ar[i].URL_PATH.toString() + '/THB_' + ar[i].URL_NAME + '.JPG';
+				list = list + '<div class="ui-picture" photoid="'+ar[i].PHOTO_ID+'"><div>$pstahl{pid='+ar[i].PHOTO_ID+'}</div><div class="ui-pic-wrap"><img data-toggle="tooltip" data-placement="bottom" src="'+imgsrc+'" title="'+ar[i].DESCRIPTION+'" /></div></div>';
+			}
+			$('#photo-list').html(list);
+
+			$('[data-toggle="tooltip"]').tooltip(); 
+
+			$('div.ui-picture').click(function(){
+				var imgid = $(this).attr('photoid');
+				var imgsrc = $(this).find('img').attr('src').replace('THB','IMG');
+				var imgdesc = $(this).find('img').attr('data-original-title');
+				$('#picture-lightbox textarea.description').val(imgdesc);
+				$('#picture-lightbox textarea.description').attr('photoid',imgid);				
+				$('#picture-lightbox button.delete').attr('photoid',imgid);	
+				$('#picture-lightbox label.pstahl-pid ').html('$pstahl{pid='+imgid+'}');	
+				$('#picture-lightbox div.modal-body').html('<img class="img-responsive" src="'+imgsrc+'"/>');	
+				$("#picture-lightbox").modal()		
+			});
+			
+		}
+
+		var imgt;
+		function update_picture_description(e) {
+			var textvalue = $('#picture-lightbox').find('textarea').val();
+			var photoid = $('#picture-lightbox').find('textarea').attr('photoid');
+			e.stopPropagation();
+			clearTimeout(imgt);
+			imgt = setTimeout(function(){
+				var data='action=photo-update&photoid='+photoid+'&description='+textvalue;				
+				$.ajax({ url: "index.php", dataType:'json', method:'POST', data:data, cache:false, context: document.body }).done(function(ar){
+					render_picture_list(ar)
+				}).error(function(er){
+					console.debug('error:',er);
+				});
+			},1000);			
+		}
+
+		function delete_picture(e) {
+			var photoid = $(this).attr('photoid');
+			e.stopPropagation();
+			var data='action=photo-delete&photoid='+photoid;				
+			$.ajax({ url: "index.php", dataType:'json', method:'POST', data:data, cache:false, context: document.body }).done(function(ar){
+				render_picture_list(ar)
+				$('#picture-lightbox').modal('hide');
+			}).error(function(er){
+				console.debug('error:',er);
+			});
+		}
+
+
+		/**
+		 *  3. Blog table list
 		 *  
 		 */
 		function display_blog_list(pstahldb) {			
@@ -1077,7 +1476,7 @@ function export_blog_process($config,$env) {
 
 
 		/**
-		 *  3. Create / Update form population
+		 *  4. Create / Update form population
 		 */
 		function populate_create_form(blogid, title, tags, publishdate, status, content, contentsummary, blogtype, blogpath) {
 											
@@ -1091,7 +1490,7 @@ function export_blog_process($config,$env) {
 			CKEDITOR.instances['blog-editor'].setData( content&&content!='' ? content : '' ); 
 			CKEDITOR.instances['blog-summary'].setData( contentsummary&&contentsummary!='' ? contentsummary : '' ); 
 
-			d = (publishdate && publishdate!='') ? new Date( Date.parse(publishdate) ) : new Date(); console.info(publishdate,d);
+			d = (publishdate && publishdate!='') ? new Date( Date.parse(publishdate) ) : new Date(); 
 			day = d.getDate();
 			month = d.getMonth() + 1; //month: 0-11
 			year = d.getFullYear();
@@ -1188,6 +1587,7 @@ function export_blog_process($config,$env) {
 		<li class="active nav-list-blog"><a href="#list-blog">Blogs</a></li>
 		<li class="nav-create-blog sr-only"><a href="#create-blog">Create Blog</a></li>		
 		<li class="nav-manage-template"><a href="#manage-template">Manage Template</a></li>
+		<li class="nav-manage-photo"><a href="#manage-photo">Manage Photo</a></li>
 		<li class="nav-export-blog"><a href="#export-blog">Export</a></li>
 		<li class="nav-preview-blog"><a href="#preview-blog">Preview</a></li>
 	</ul>
@@ -1196,6 +1596,7 @@ function export_blog_process($config,$env) {
   		<!-- #list-blog -->  		
 		<div id="list-blog" class="tab-pane fade in active">	
 			<h3>Blogs</h3>
+			<p>Blog list and contents.</p>
 			<p>
 			<button id="btn-create-blog" type="button" class="btn btn-default">Create Blog</button>
 			</p>
@@ -1286,8 +1687,8 @@ function export_blog_process($config,$env) {
     	</div>
     	<!-- /#create-blog -->
 
-
-    	<div id="manage-template" class="tab-pane fade">
+    	<!-- #manage-template -->
+		<div id="manage-template" class="tab-pane fade">
     		<h3>Manage Template</h3>
     		<p>Allow you to manage the defined site template <a href="#">[<?php echo $_TEMPLATE_PAGE; ?>]</a>.</p>
     		<div>
@@ -1309,6 +1710,27 @@ function export_blog_process($config,$env) {
     			}
     		</script>
     	</div>
+    	<!-- /#manage-template -->
+
+		<!-- #manage-photo -->
+		<div id="manage-photo" class="tab-pane fade">
+			<h3>Manage Photo</h3>
+			<p>Basic photo management tool.</p>
+			<form id="form-blog-photo" action="" method="POST" role="form" >
+				<div class="row">
+					<div class="form-group col-xs-2">
+						<span class="btn btn-default btn-file btn-sm">Browse and Upload <input id="file-upload" type="file" multiple></span>					
+					</div>					
+					<div class="form-group col-xs-4">					
+						<input id="file-search" type="text" class="form-control" value="" placeholder="Image Search" />
+					</div>
+					<div class="form-group col-xs-6"></div>
+				</div>				
+				<p>Photo List</p>
+				<div id="photo-list"></div>		
+			<form>
+		</div>
+		<!-- /#manage-photo -->
 
 
     	<!-- #export-blog -->
@@ -1370,7 +1792,7 @@ function export_blog_process($config,$env) {
 			<h3>Preview</h3>
 			<form>
 				<p>Preview of the blog post.</p>
-				<a id="preview-blog-link" href="#" target="_BLANK">Generated Previewed Content</iframe>
+				<a id="preview-blog-link" href="#" target="_BLANK">Generated Previewed Content</a>
 			</form>			
 		</div>
 		<!-- /#preview-blog -->
@@ -1389,7 +1811,7 @@ function export_blog_process($config,$env) {
 					<h4 class="modal-title">Check for Updates</h4>
 				</div>
 				<div class="modal-body">
-					<p>For recent builds please check the lastest changes at github <a href="https://github.com/joeyapa/pstahl/" target="_blank">https://github.com/joeyapa/</a>.</p>
+					<p>For recent builds please check the lastest changes at github <a href="https://github.com/joeyapa/Php-Staticsite-Generator/" target="_blank">https://github.com/joeyapa/</a>.</p>
 				</div>
 				<div class="modal-footer"><button type="button" class="btn btn-default" data-dismiss="modal">Close</button></div>
 			</div>
@@ -1443,11 +1865,11 @@ function export_blog_process($config,$env) {
 						<?php
 							$index_count = 0;
 							foreach ($_SQLITE_DATABASE_PATH_LIST as $value) {
-								if( $value == $_SQLITE_DATABASE_PATH ) {
-									echo "<option value='$index_count' selected='selected'>$value</option>";	
+								if( $value['db'] == $_SQLITE_DATABASE_PATH ) {
+									echo "<option value='$index_count' selected='selected'>".$value['db']."</option>";	
 								}
 								else {
-									echo "<option value='$index_count'>$value</option>";	
+									echo "<option value='$index_count'>".$value['db']."</option>";	
 								}								
 								$index_count++;
 							}
@@ -1465,8 +1887,33 @@ function export_blog_process($config,$env) {
 		</div>
 	</div>
 	<!-- /.END Modal: Select database -->				
+	<!-- Modal: Picture lightbox --> 
+	<div id="picture-lightbox" class="modal fade" role="dialog">
+		<div class="modal-dialog ">	    
+			<div class="modal-content">
+				<div class="modal-header"><textarea class="description"></textarea><button type="button" class="close" data-dismiss="modal">&times;</button></div>
+				<div class="modal-body"></div>
+				<div class="modal-footer">
+					<label class="pstahl-pid pull-left"></label>
+					<button type="button" class="btn btn-info save" data-dismiss="modal">Save</button>
+					<button type="button" class="btn btn-warning delete" data-dismiss="modal">Delete</button>
+					<button type="button" class="btn btn-default" data-dismiss="modal">Cancel</button>
+				</div>
+			</div>
+		</div>
+	</div>
+	<!-- /.END Modal: Picture lightbox -->
+	<!-- Modal: Picture lightbox --> 
+	<div id="modal-loader" class="modal fade" role="dialog">
+		<div class="modal-dialog modal-lg">	    
+			<div class="modal-content">				
+				<div class="modal-body"><div class="loader">Loading...</div></div>
+			</div>
+		</div>
+	</div>
+	<!-- /.END Modal: Picture lightbox -->
 </div>
-
+</div>
 
 <?php else: ?>
 <!-- div.ui-login-wrapper -->
@@ -1492,7 +1939,6 @@ function export_blog_process($config,$env) {
 	</form>
 </div>
 <!-- /.ui-login-wrapper -->
-
 
 <?php endif; ?>
 
