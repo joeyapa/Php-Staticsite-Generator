@@ -780,20 +780,22 @@ function scale_photo($filename,$filepath,$uid=NULL,$filemtime=NULL) {
 		mkdir( $filepath . $filemtime , 0700, true);
 	}
 	
-	if( $imgwidth > $imgheight ) { // landscape	    		
-		$resource = imagescale( imagecreatefromjpeg($filepath.$filename) , 128);
+	if( $imgwidth > $imgheight ) { // landscape	
+		$imgres = imagecreatefromjpeg($filepath.$filename);	
+		$resource = imagescale($imgres  , 128);
 		imagejpeg($resource , $filepath . $filemtime . '/' . $timg_uid);	
-		$resource = imagescale( imagecreatefromjpeg($filepath.$filename) , 512); // 512x320
+		$resource = imagescale( $imgres , 512); // 512x320
 		imagejpeg($resource , $filepath . $filemtime . '/' . $wimg_uid);			  			
-		$resource = imagescale( imagecreatefromjpeg($filepath.$filename) , 1280); // 1280x800
+		$resource = imagescale( $imgres , 1280); // 1280x800
 		imagejpeg($resource , $filepath . $filemtime . '/' . $oimg_uid);	
 	}
 	else { // portrait
-		$resource = imagescale( imagecreatefromjpeg($filepath.$filename) , 128);
+		$imgres = imagecreatefromjpeg($filepath.$filename);
+		$resource = imagescale( $imgres , 128);
 		imagejpeg($resource , $filepath . $filemtime . '/' . $timg_uid);	
-		$resource = imagescale( imagecreatefromjpeg($filepath.$filename) , 320); 
+		$resource = imagescale( $imgres , 320); 
 		imagejpeg($resource , $filepath . $filemtime . '/' . $wimg_uid);			  			
-		$resource = imagescale( imagecreatefromjpeg($filepath.$filename) , 800);
+		$resource = imagescale( $imgres , 800);
 		imagejpeg($resource , $filepath . $filemtime . '/' . $oimg_uid);	
 	}	
 
@@ -873,7 +875,7 @@ function is_valid_blog_entry() {
 	}
 	
 	// allows bypass for first page
-	if( get('blog-path') != '&' ) {
+	if( get('blog-path') == '&' ) {
 		$_POST['blog-path']='';
 	}
 
