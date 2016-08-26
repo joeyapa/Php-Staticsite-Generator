@@ -79,7 +79,7 @@ $_SQLITE_DATABASE_PATH = 'db/pstahl-sqlite.db';
 $_PHOTOPATH = "db/cache1/";
 $_ADMIN_EMAIL_LOGIN = 'z@z.z';
 $_ADMIN_PASSWORD = '1';
-$_PSTAHL_VERSION = '3';
+$_PSTAHL_VERSION = '5';
 $_TEMPLATE_PAGE = 'default.tpl.html';
 
 
@@ -752,6 +752,8 @@ function get_photo($pid,$basepath,$urlpath,$flagurl=TRUE) {
 			if ( !is_dir($basepath.'photo/') ) { mkdir($basepath.'photo/', 0700, true); }
 			$file = fopen($basepath.'photo/'.$photo['URL_NAME'].'.JPG', "w") or die("Unable to open file!");
 			fwrite($file, $row['IMAGE']);
+			fclose($file); 
+			sleep(1);
 			scale_photo($photo['URL_NAME'].'.JPG',$basepath.'photo/',$photo['URL_NAME'],$photo['URL_PATH']); 			
 		}
 		$photo = $photo_path;
@@ -771,6 +773,7 @@ function scale_photo($filename,$filepath,$uid=NULL,$filemtime=NULL) {
 
 	$uid = $uid==NULL ? strtoupper(uniqid()) : $uid; // generate unique identifier
 	$nuid = $uid.'.JPG';
+	$img_uid = 'ORI_'.$nuid;
 	$timg_uid = 'THB_'.$nuid;
 	$wimg_uid = 'WEB_'.$nuid;
 	$oimg_uid = 'IMG_'.$nuid;
@@ -780,24 +783,52 @@ function scale_photo($filename,$filepath,$uid=NULL,$filemtime=NULL) {
 		mkdir( $filepath . $filemtime , 0700, true);
 	}
 	
-	if( $imgwidth > $imgheight ) { // landscape	
-		$imgres = imagecreatefromjpeg($filepath.$filename);	
-		$resource = imagescale($imgres  , 128);
-		imagejpeg($resource , $filepath . $filemtime . '/' . $timg_uid);	
-		$resource = imagescale( $imgres , 512); // 512x320
-		imagejpeg($resource , $filepath . $filemtime . '/' . $wimg_uid);			  			
-		$resource = imagescale( $imgres , 1280); // 1280x800
-		imagejpeg($resource , $filepath . $filemtime . '/' . $oimg_uid);	
+	switch ( exif_imagetype($filepath.$filename) ) {
+		case IMAGETYPE_JPEG:			
+			$imgres = imagecreatefromjpeg($filepath.$filename);
+			if( $imgwidth > $imgheight ) { // landscape	    		
+				$resource = imagescale($imgres  , 128);
+				imagejpeg($resource , $filepath . $filemtime . '/' . $timg_uid);	
+				$resource = imagescale($imgres , 512); // 512x320
+				imagejpeg($resource , $filepath . $filemtime . '/' . $wimg_uid);			  			
+				$resource = imagescale($imgres , 1280); // 1280x800
+				imagejpeg($resource , $filepath . $filemtime . '/' . $oimg_uid);	
+			}
+			else { // portrait
+				$resource = imagescale($imgres , 128);
+				imagejpeg($resource , $filepath . $filemtime . '/' . $timg_uid);	
+				$resource = imagescale($imgres , 320); 
+				imagejpeg($resource , $filepath . $filemtime . '/' . $wimg_uid);			  			
+				$resource = imagescale($imgres , 800);
+				imagejpeg($resource , $filepath . $filemtime . '/' . $oimg_uid);	
+			}	
+			break;
+		case IMAGETYPE_PNG:	
+			$imgres = imagecreatefrompng($filepath.$filename);
+			if( $imgwidth > $imgheight ) { // landscape	    		
+				$resource = imagescale($imgres  , 128);
+				imagepng($resource , $filepath . $filemtime . '/' . $timg_uid);	
+				$resource = imagescale($imgres , 512); // 512x320
+				imagepng($resource , $filepath . $filemtime . '/' . $wimg_uid);			  			
+				$resource = imagescale($imgres , 1280); // 1280x800
+				imagepng($resource , $filepath . $filemtime . '/' . $oimg_uid);	
+			}
+			else { // portrait
+				$resource = imagescale($imgres , 128);
+				imagepng($resource , $filepath . $filemtime . '/' . $timg_uid);	
+				$resource = imagescale($imgres , 320); 
+				imagepng($resource , $filepath . $filemtime . '/' . $wimg_uid);			  			
+				$resource = imagescale($imgres , 800);
+				imagepng($resource , $filepath . $filemtime . '/' . $oimg_uid);	
+			}			
+			break;
+		case IMAGETYPE_SWF:			
+			break;
+		case IMAGETYPE_BMP:			
+			break;		
 	}
-	else { // portrait
-		$imgres = imagecreatefromjpeg($filepath.$filename);
-		$resource = imagescale( $imgres , 128);
-		imagejpeg($resource , $filepath . $filemtime . '/' . $timg_uid);	
-		$resource = imagescale( $imgres , 320); 
-		imagejpeg($resource , $filepath . $filemtime . '/' . $wimg_uid);			  			
-		$resource = imagescale( $imgres , 800);
-		imagejpeg($resource , $filepath . $filemtime . '/' . $oimg_uid);	
-	}	
+	
+	rename($filepath.$filename, $filepath . $filemtime . '/' . $img_uid);
 
 	return array('URL_PATH'=>$filemtime, 'URL_NAME'=>$uid );
 }
@@ -829,17 +860,18 @@ function delete_photo($photoid) {
  *  C.8 Photo mapping
  */
 function map_photo($content, $basepath, $baseurl) { 
-	$typ = array('pid','pidt','pidw');
+	$typ = array('pid','pidt','pidw','pido');
+	$pi = '<img class="pstahl-img" src="'; $ps = '"/>';
 	for($j=0;$j<count($typ);$j++) {
 		$regex = '/\$pstahl{'.$typ[$j].'=(.*?)}/';
 		preg_match_all($regex, $content, $match); 
 		if( count($match) > 1 ) {		
 			for($i=0;$i<count($match[0]);$i++) {		
 				$photo = get_photo($match[1][$i], $basepath, $baseurl);	
-				if( $typ[$j]=='pidt' ) { $photo = str_replace('IMG_', 'THB_', $photo); }
-				if( $typ[$j]=='pidw' ) { $photo = str_replace('IMG_', 'WEB_', $photo); }
-				$imgobj = '<img class="pstahl-img" src="'.$photo.'"/>';		
-				$content = str_replace($match[0][$i], $imgobj, $content);			
+				if( $typ[$j]=='pidt' ) { $photo = $pi.str_replace('IMG_', 'THB_', $photo).$ps; }
+				if( $typ[$j]=='pidw' ) { $photo = $pi.str_replace('IMG_', 'WEB_', $photo).$ps; }
+				if( $typ[$j]=='pido' ) { $photo = str_replace('IMG_', 'ORI_', $photo); }		
+				$content = str_replace($match[0][$i], $photo, $content);		
 			}
 		}	
 	}
@@ -1020,6 +1052,7 @@ function export_blog_process($config,$env) {
 	// ii. preload templates
 	$_PAGE_TPL = str_replace("\$pstahl{baseurl}",$_BASE_URL,read_file($_TEMPLATE_PAGE));
 	$_PAGE_TPL = str_replace("\$pstahl{title}",$_PAGE_TITLE,$_PAGE_TPL);
+	$_PAGE_TPL = map_photo($_PAGE_TPL,$_BASE_PATH,$_BASE_URL);
 
 	// 1. run the process in the background. recommended that it is shot at an ajax request. check the status based on the db
 	ignore_user_abort(true); 
